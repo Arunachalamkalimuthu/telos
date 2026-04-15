@@ -43,3 +43,30 @@ def gravity(world: WorldState) -> list[CausalEdge]:
             )
         )
     return edges
+
+
+def containment(world: WorldState) -> list[CausalEdge]:
+    """Contents of an inverted, unsealed container escape."""
+    edges: list[CausalEdge] = []
+    for entity in world.entities.values():
+        if not entity.has("contains"):
+            continue
+        orientation = entity.get("orientation")
+        sealed = entity.get("sealed")
+        if orientation != "inverted":
+            continue
+        if sealed is True:
+            continue
+        # Material that absorbs its own contents breaks the chain too.
+        if entity.get("material") == "absorbent":
+            continue
+        escape_var = f"{entity.id}.contents_escape"
+        edges.append(
+            CausalEdge(
+                parents=(),
+                effect=escape_var,
+                mechanism=lambda _: True,
+                label=f"containment({entity.id})",
+            )
+        )
+    return edges
