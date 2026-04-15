@@ -55,3 +55,40 @@ class CausalGraph:
 
     def all_edges(self) -> list[CausalEdge]:
         return list(self._edges)
+
+    def _topological_order(self) -> list[str]:
+        # Kahn's algorithm.
+        indegree: dict[str, int] = {v: 0 for v in self._values}
+        children: dict[str, list[str]] = {v: [] for v in self._values}
+        for edge in self._edges:
+            indegree[edge.effect] += len(edge.parents)
+            for p in edge.parents:
+                children[p].append(edge.effect)
+
+        queue = [v for v, d in indegree.items() if d == 0]
+        order: list[str] = []
+        while queue:
+            node = queue.pop(0)
+            order.append(node)
+            for child in children[node]:
+                indegree[child] -= 1
+                if indegree[child] == 0:
+                    queue.append(child)
+        if len(order) != len(self._values):
+            raise ValueError("causal graph contains a cycle")
+        return order
+
+    def propagate(self) -> dict[str, Any]:
+        order = self._topological_order()
+        state = dict(self._values)
+        for var in order:
+            incoming = self.edges_into(var)
+            if not incoming:
+                continue
+            # Variables with multiple incoming edges: compose by the last edge
+            # defined (caller is expected to declare a single mechanism per var;
+            # additional edges represent joint causes inside one mechanism).
+            edge = incoming[-1]
+            parent_values = {p: state[p] for p in edge.parents}
+            state[var] = edge.mechanism(parent_values)
+        return state
