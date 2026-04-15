@@ -52,12 +52,22 @@ def run():
     ]
 
     print("Evaluating candidate interventions:")
-    best = None
+    reachable: list[tuple[Action, Intervention]] = []
     for action, intervention in candidates:
-        reachable = intervention_effect(intervention, child)
-        print(f"  {action.name}: intervention={intervention.kind}, reaches child={reachable}")
-        if reachable and best is None:
+        ok = intervention_effect(intervention, child)
+        print(f"  {action.name}: intervention={intervention.kind}, reaches child={ok}")
+        if ok:
+            reachable.append((action, intervention))
+
+    # Prefer a physical intervention over a sensory one: a running child may
+    # not turn to look, but cannot be un-intercepted.
+    best = None
+    for action, intervention in reachable:
+        if intervention.kind == "physical":
             best = action
+            break
+    if best is None and reachable:
+        best = reachable[0][0]
 
     print()
     if best is None:
