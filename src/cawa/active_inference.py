@@ -40,3 +40,57 @@ def epistemic_value(
         if v_before == unknown_marker and after.get(var, unknown_marker) != unknown_marker:
             resolved += 1
     return float(resolved)
+
+
+@dataclass
+class Plan:
+    action: Action
+    efe: float
+    pragmatic: float
+    epistemic: float
+    causal_chain: list[CausalEdge]
+    counterfactuals: dict[str, dict[str, Any]]
+    chosen_state: dict[str, Any]
+
+
+def select_action(
+    graph: CausalGraph,
+    actions: list[Action],
+    goal: Mapping[str, Any],
+) -> Plan:
+    """Return the action minimising expected free energy."""
+    if not actions:
+        raise ValueError("no actions to choose from")
+
+    baseline_state = graph.propagate()
+    scored: list[tuple[float, float, float, Action, dict[str, Any]]] = []
+    counterfactuals: dict[str, dict[str, Any]] = {}
+
+    for action in actions:
+        predicted = graph.counterfactual(dict(action.effects)) if action.effects else baseline_state
+        counterfactuals[action.name] = predicted
+        prag = pragmatic_value(predicted, goal)
+        epi = epistemic_value(baseline_state, predicted)
+        efe = -(prag + epi)
+        scored.append((efe, prag, epi, action, predicted))
+
+    # Stable ordering: lowest EFE, ties broken by original action order.
+    best_index = min(range(len(scored)), key=lambda i: (scored[i][0], i))
+    efe, prag, epi, action, predicted = scored[best_index]
+
+    # Build the causal chain for the primary goal variable (first key in goal).
+    target_var = next(iter(goal), None)
+    if target_var is not None and target_var in graph.variables():
+        chain = graph.explain_path(target_var)
+    else:
+        chain = graph.all_edges()
+
+    return Plan(
+        action=action,
+        efe=efe,
+        pragmatic=prag,
+        epistemic=epi,
+        causal_chain=chain,
+        counterfactuals=counterfactuals,
+        chosen_state=predicted,
+    )

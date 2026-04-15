@@ -1,5 +1,6 @@
 import unittest
-from cawa.active_inference import Action, pragmatic_value, epistemic_value
+from cawa.active_inference import Action, pragmatic_value, epistemic_value, Plan, select_action
+from cawa.causal_graph import CausalGraph
 
 
 class TestAction(unittest.TestCase):
@@ -35,6 +36,41 @@ class TestEpistemicValue(unittest.TestCase):
             epistemic_value(state_before, state_after_more_info),
             epistemic_value(state_before, state_after_less_info),
         )
+
+
+class TestSelectAction(unittest.TestCase):
+    def _build_graph(self):
+        # Simple graph: sealed → spill → damage.
+        g = CausalGraph()
+        g.add_variable("sealed", initial=False)
+        g.add_variable("spill")
+        g.add_variable("damage")
+        g.add_mechanism("spill", ["sealed"], lambda p: not p["sealed"], label="containment")
+        g.add_mechanism("damage", ["spill"], lambda p: p["spill"], label="liquid_damage")
+        return g
+
+    def test_select_action_prefers_lower_efe(self):
+        g = self._build_graph()
+        actions = [
+            Action(name="do_nothing", effects={}, description="leave as is"),
+            Action(name="seal_cup", effects={"sealed": True}, description="put a lid on"),
+        ]
+        goal = {"damage": False}
+        plan = select_action(g, actions, goal)
+        self.assertIsInstance(plan, Plan)
+        self.assertEqual(plan.action.name, "seal_cup")
+
+    def test_plan_contains_causal_chain_and_counterfactuals(self):
+        g = self._build_graph()
+        actions = [
+            Action(name="do_nothing", effects={}),
+            Action(name="seal_cup", effects={"sealed": True}),
+        ]
+        goal = {"damage": False}
+        plan = select_action(g, actions, goal)
+        self.assertTrue(any(e.label for e in plan.causal_chain))
+        self.assertIn("seal_cup", plan.counterfactuals)
+        self.assertIn("do_nothing", plan.counterfactuals)
 
 
 if __name__ == "__main__":
