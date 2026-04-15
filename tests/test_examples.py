@@ -27,5 +27,16 @@ class TestChildRoadExample(unittest.TestCase):
         self.assertIn("deaf", out.lower())
 
 
+class TestSaltRequestExample(unittest.TestCase):
+    def test_salt_request_infers_request_meaning_from_beliefs(self):
+        buf = StringIO()
+        with redirect_stdout(buf):
+            mod = importlib.import_module("examples.salt_request")
+            mod.run()
+        out = buf.getvalue()
+        self.assertIn("pass", out.lower())
+        self.assertIn("cast", out.lower())
+
+
 if __name__ == "__main__":
     unittest.main()
