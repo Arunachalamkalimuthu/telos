@@ -82,5 +82,36 @@ class TestCausalGraphIntervention(unittest.TestCase):
         self.assertFalse(g.counterfactual({"gravity": False})["spill"])
 
 
+class TestCausalGraphExplain(unittest.TestCase):
+    def test_explain_path_returns_chain_of_edges(self):
+        g = CausalGraph()
+        g.add_variable("orientation", initial="inverted")
+        g.add_variable("sealed", initial=False)
+        g.add_variable("contents_escape")
+        g.add_variable("liquid_falls")
+        g.add_variable("laptop_damaged")
+        g.add_mechanism(
+            "contents_escape",
+            ["orientation", "sealed"],
+            lambda p: p["orientation"] == "inverted" and not p["sealed"],
+            label="containment_breach",
+        )
+        g.add_mechanism(
+            "liquid_falls",
+            ["contents_escape"],
+            lambda p: p["contents_escape"],
+            label="gravity",
+        )
+        g.add_mechanism(
+            "laptop_damaged",
+            ["liquid_falls"],
+            lambda p: p["liquid_falls"],
+            label="impact",
+        )
+        chain = g.explain_path("laptop_damaged")
+        labels = [e.label for e in chain]
+        self.assertEqual(labels, ["containment_breach", "gravity", "impact"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -109,3 +109,27 @@ class CausalGraph:
         for var, value in interventions.items():
             g = g.do(var, value)
         return g.propagate()
+
+    def explain_path(self, target: str) -> list[CausalEdge]:
+        """Return the causal chain from root causes to `target` in topological order."""
+        if target not in self._values:
+            raise ValueError(f"unknown variable {target!r}")
+        # Collect all ancestors of target.
+        relevant: set[str] = set()
+        stack = [target]
+        while stack:
+            node = stack.pop()
+            if node in relevant:
+                continue
+            relevant.add(node)
+            for edge in self.edges_into(node):
+                for p in edge.parents:
+                    stack.append(p)
+        # Return edges among ancestors, in topological order.
+        order = self._topological_order()
+        edges_in_order: list[CausalEdge] = []
+        for var in order:
+            if var in relevant:
+                for edge in self.edges_into(var):
+                    edges_in_order.append(edge)
+        return edges_in_order
