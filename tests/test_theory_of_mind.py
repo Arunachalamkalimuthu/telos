@@ -1,6 +1,6 @@
 import unittest
 from cawa.world import Entity, WorldState
-from cawa.theory_of_mind import AgentMind, predict_action
+from cawa.theory_of_mind import AgentMind, predict_action, intervention_effect, Intervention
 
 
 class TestAgentMind(unittest.TestCase):
@@ -48,6 +48,33 @@ class TestPredictAction(unittest.TestCase):
             actions=["wait"],
         )
         self.assertEqual(predict_action(mind, WorldState(entities={}, relations=())), "wait")
+
+
+class TestInterventionEffect(unittest.TestCase):
+    def _mind(self, capabilities):
+        return AgentMind(
+            id="child",
+            beliefs=WorldState(entities={}, relations=()),
+            goals=[],
+            capabilities=frozenset(capabilities),
+            actions=["run"],
+        )
+
+    def test_verbal_signal_reaches_hearing_agent(self):
+        mind = self._mind({"visual", "auditory"})
+        self.assertTrue(intervention_effect(Intervention(kind="verbal", content="stop"), mind))
+
+    def test_verbal_signal_does_not_reach_deaf_agent(self):
+        mind = self._mind({"visual"})
+        self.assertFalse(intervention_effect(Intervention(kind="verbal", content="stop"), mind))
+
+    def test_visual_signal_does_not_reach_blind_agent(self):
+        mind = self._mind({"auditory"})
+        self.assertFalse(intervention_effect(Intervention(kind="visual", content="wave"), mind))
+
+    def test_physical_intervention_always_effective(self):
+        mind = self._mind(set())
+        self.assertTrue(intervention_effect(Intervention(kind="physical", content="intercept"), mind))
 
 
 if __name__ == "__main__":

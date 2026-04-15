@@ -40,3 +40,32 @@ def predict_action(mind: AgentMind, _ground_truth: WorldState) -> str:
         if goal_intent and goal_intent in action:
             return action
     return mind.actions[0]
+
+
+@dataclass(frozen=True)
+class Intervention:
+    kind: str  # "verbal", "visual", "physical", "tactile"
+    content: str = ""
+
+
+# Mapping from intervention kind to the capability it requires on the target.
+_CHANNEL_REQUIREMENT: dict[str, str] = {
+    "verbal": "auditory",
+    "visual": "visual",
+    "tactile": "tactile",
+}
+
+
+def intervention_effect(intervention: Intervention, target: AgentMind) -> bool:
+    """Return True iff `intervention` can reach `target` given their capabilities.
+
+    Physical interventions bypass sensory channels (you can intercept a deaf
+    child by running in front of them). Sensory channels require the matching
+    capability on the target.
+    """
+    if intervention.kind == "physical":
+        return True
+    required = _CHANNEL_REQUIREMENT.get(intervention.kind)
+    if required is None:
+        return False
+    return required in target.capabilities
