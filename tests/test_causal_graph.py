@@ -1,5 +1,5 @@
 import unittest
-from cawa.causal_graph import CausalGraph, CausalEdge
+from telos.causal_graph import CausalGraph, CausalEdge
 
 
 class TestCausalGraphConstruction(unittest.TestCase):

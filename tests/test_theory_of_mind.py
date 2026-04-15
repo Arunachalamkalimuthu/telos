@@ -1,6 +1,6 @@
 import unittest
-from cawa.world import Entity, WorldState
-from cawa.theory_of_mind import AgentMind, predict_action, intervention_effect, Intervention
+from telos.world import Entity, WorldState
+from telos.theory_of_mind import AgentMind, predict_action, intervention_effect, Intervention
 
 
 class TestAgentMind(unittest.TestCase):

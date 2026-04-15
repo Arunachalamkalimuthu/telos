@@ -1,6 +1,8 @@
-# CAWA — Causal Active World Architecture
+# telos
 
-A Python reference implementation of the architecture described in the Medium article *Beyond Token Prediction: How LLMs, JEPA, and CAWA See the World Differently*.
+A Python reference implementation of the Causal Active World Architecture (CAWA) described in the Medium article *Beyond Token Prediction: How LLMs, JEPA, and CAWA See the World Differently*.
+
+The name — Greek for "goal" or "purpose" — reflects the goal-directed action-selection at the heart of active inference.
 
 **This is not AGI.** This is a closed-domain proof that causal graphs, physics primitives, theory of mind, and active inference compose cleanly into a working agent. See `docs/architecture.md` for an honest accounting of what this does and does not demonstrate.
 

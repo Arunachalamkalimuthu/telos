@@ -6,12 +6,12 @@ This document maps each claim from the Medium article *Beyond Token Prediction: 
 
 | Article claim | Code location | Status |
 |---|---|---|
-| "Causal graph constructed" | `src/cawa/causal_graph.py` | Implemented on hand-built graphs; automatic construction from perception is NOT implemented (open research problem). |
-| "Physics primitives apply" | `src/cawa/physics.py` | Implemented: `gravity`, `containment`, `impact`, `liquid_damage`. Hand-coded axioms; extensible but closed-domain. |
+| "Causal graph constructed" | `src/telos/causal_graph.py` | Implemented on hand-built graphs; automatic construction from perception is NOT implemented (open research problem). |
+| "Physics primitives apply" | `src/telos/physics.py` | Implemented: `gravity`, `containment`, `impact`, `liquid_damage`. Hand-coded axioms; extensible but closed-domain. |
 | "Counterfactual reasoning" | `CausalGraph.do` and `CausalGraph.counterfactual` | Implemented. Severs incoming edges to intervened variables (Pearl's do-operator). |
-| "Theory of mind module" | `src/cawa/theory_of_mind.py` | Implemented: `AgentMind`, `predict_action` uses agent beliefs, `intervention_effect` respects capabilities. Belief states are hand-specified, not inferred from observation. |
-| "Active inference / free energy minimisation" | `src/cawa/active_inference.py` | Implemented on small discrete state spaces. `EFE = -(pragmatic + epistemic)`. |
-| "Honest uncertainty about unknown entities" | `src/cawa/world.py` (`UNKNOWN`) and `examples/novel_entity.py` | Implemented as explicit sentinel; example demonstrates flagging rather than guessing. |
+| "Theory of mind module" | `src/telos/theory_of_mind.py` | Implemented: `AgentMind`, `predict_action` uses agent beliefs, `intervention_effect` respects capabilities. Belief states are hand-specified, not inferred from observation. |
+| "Active inference / free energy minimisation" | `src/telos/active_inference.py` | Implemented on small discrete state spaces. `EFE = -(pragmatic + epistemic)`. |
+| "Honest uncertainty about unknown entities" | `src/telos/world.py` (`UNKNOWN`) and `examples/novel_entity.py` | Implemented as explicit sentinel; example demonstrates flagging rather than guessing. |
 | "Learned causal structure" | — | Not implemented. Causal graphs are hand-built per scene. |
 | "Perception from images/video" | — | Not implemented. Scenes are specified in Python. |
 | "Natural language understanding" | — | Not implemented. |

@@ -1,6 +1,6 @@
 import unittest
-from cawa.active_inference import Action, pragmatic_value, epistemic_value, Plan, select_action
-from cawa.causal_graph import CausalGraph
+from telos.active_inference import Action, pragmatic_value, epistemic_value, Plan, select_action
+from telos.causal_graph import CausalGraph
 
 
 class TestAction(unittest.TestCase):

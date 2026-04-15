@@ -1,7 +1,7 @@
 import unittest
-from cawa.world import Entity, Relation, WorldState
-from cawa.active_inference import Action
-from cawa.agent import CAWAAgent
+from telos.world import Entity, Relation, WorldState
+from telos.active_inference import Action
+from telos.agent import CAWAAgent
 
 
 class TestCAWAAgent(unittest.TestCase):

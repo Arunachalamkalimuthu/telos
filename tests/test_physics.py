@@ -1,6 +1,6 @@
 import unittest
-from cawa.world import Entity, Relation, WorldState
-from cawa.physics import gravity, containment, impact, liquid_damage, apply_all, ALL_PRIMITIVES
+from telos.world import Entity, Relation, WorldState
+from telos.physics import gravity, containment, impact, liquid_damage, apply_all, ALL_PRIMITIVES
 
 
 class TestGravity(unittest.TestCase):

@@ -1,6 +1,6 @@
 """Coffee cup on laptop: physics + counterfactuals."""
 
-from cawa import (
+from telos import (
     Action,
     CAWAAgent,
     Entity,

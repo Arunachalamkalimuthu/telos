@@ -1,6 +1,6 @@
 """Dinner table "Can you pass me the salt?": theory of mind + social inference."""
 
-from cawa import AgentMind, Entity, Relation, WorldState
+from telos import AgentMind, Entity, Relation, WorldState
 
 
 def scene():

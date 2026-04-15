@@ -1,6 +1,6 @@
 """Deaf child running toward a road: theory of mind + perceptual constraints."""
 
-from cawa import (
+from telos import (
     Action,
     AgentMind,
     Entity,

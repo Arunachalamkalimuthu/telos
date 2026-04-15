@@ -1,6 +1,6 @@
 """Unknown entity falls off unknown surface: physics applies; unknowns flagged honestly."""
 
-from cawa import UNKNOWN, CAWAAgent, Entity, Relation, WorldState
+from telos import UNKNOWN, CAWAAgent, Entity, Relation, WorldState
 
 
 def scene():

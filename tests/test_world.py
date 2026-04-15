@@ -1,5 +1,5 @@
 import unittest
-from cawa.world import UNKNOWN, Entity, Relation, WorldState
+from telos.world import UNKNOWN, Entity, Relation, WorldState
 
 
 class TestEntity(unittest.TestCase):
