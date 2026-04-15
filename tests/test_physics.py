@@ -1,6 +1,6 @@
 import unittest
 from cawa.world import Entity, Relation, WorldState
-from cawa.physics import gravity, containment
+from cawa.physics import gravity, containment, impact
 
 
 class TestGravity(unittest.TestCase):
@@ -68,6 +68,51 @@ class TestContainment(unittest.TestCase):
         )
         ws = WorldState(entities={"cup": cup}, relations=())
         self.assertEqual(containment(ws), [])
+
+
+class TestImpact(unittest.TestCase):
+    def test_fragile_object_falling_onto_hard_surface_emits_break(self):
+        glass = Entity(
+            id="glass",
+            type="glass",
+            properties={"mass": 0.3, "fragile": True, "impact_threshold": 1.0},
+        )
+        floor = Entity(id="floor", type="floor", properties={"hardness": "hard"})
+        ws = WorldState(
+            entities={"glass": glass, "floor": floor},
+            relations=(Relation("WILL_HIT", "glass", "floor", attributes={"velocity": 3.0}),),
+        )
+        edges = impact(ws)
+        effects = [e.effect for e in edges]
+        self.assertIn("glass.breaks", effects)
+
+    def test_non_fragile_object_does_not_break(self):
+        ball = Entity(
+            id="ball",
+            type="ball",
+            properties={"mass": 0.1, "fragile": False, "impact_threshold": 1.0},
+        )
+        floor = Entity(id="floor", type="floor", properties={"hardness": "hard"})
+        ws = WorldState(
+            entities={"ball": ball, "floor": floor},
+            relations=(Relation("WILL_HIT", "ball", "floor", attributes={"velocity": 10.0}),),
+        )
+        edges = impact(ws)
+        self.assertEqual(edges, [])
+
+    def test_low_velocity_impact_does_not_break(self):
+        glass = Entity(
+            id="glass",
+            type="glass",
+            properties={"mass": 0.3, "fragile": True, "impact_threshold": 5.0},
+        )
+        floor = Entity(id="floor", type="floor", properties={"hardness": "hard"})
+        ws = WorldState(
+            entities={"glass": glass, "floor": floor},
+            relations=(Relation("WILL_HIT", "glass", "floor", attributes={"velocity": 1.0}),),
+        )
+        edges = impact(ws)
+        self.assertEqual(edges, [])
 
 
 if __name__ == "__main__":

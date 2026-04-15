@@ -70,3 +70,29 @@ def containment(world: WorldState) -> list[CausalEdge]:
             )
         )
     return edges
+
+
+def impact(world: WorldState) -> list[CausalEdge]:
+    """A fragile object impacting above its threshold breaks."""
+    edges: list[CausalEdge] = []
+    for r in world.relations_of("WILL_HIT"):
+        obj = world.entities.get(r.src)
+        if obj is None:
+            continue
+        if not obj.get("fragile"):
+            continue
+        threshold = obj.get("impact_threshold")
+        velocity = r.attributes.get("velocity")
+        if not isinstance(threshold, (int, float)) or not isinstance(velocity, (int, float)):
+            continue
+        if velocity >= threshold:
+            break_var = f"{obj.id}.breaks"
+            edges.append(
+                CausalEdge(
+                    parents=(),
+                    effect=break_var,
+                    mechanism=lambda _: True,
+                    label=f"impact({obj.id})",
+                )
+            )
+    return edges
