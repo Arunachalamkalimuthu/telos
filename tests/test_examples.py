@@ -16,5 +16,16 @@ class TestCoffeeCupExample(unittest.TestCase):
         self.assertIn("counterfactual", out.lower())
 
 
+class TestChildRoadExample(unittest.TestCase):
+    def test_child_road_picks_physical_intercept_when_child_is_deaf(self):
+        buf = StringIO()
+        with redirect_stdout(buf):
+            mod = importlib.import_module("examples.child_road")
+            mod.run()
+        out = buf.getvalue()
+        self.assertIn("intercept", out.lower())
+        self.assertIn("deaf", out.lower())
+
+
 if __name__ == "__main__":
     unittest.main()
