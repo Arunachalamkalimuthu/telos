@@ -1,6 +1,6 @@
 import unittest
 from cawa.world import Entity, Relation, WorldState
-from cawa.physics import gravity, containment, impact
+from cawa.physics import gravity, containment, impact, liquid_damage
 
 
 class TestGravity(unittest.TestCase):
@@ -113,6 +113,42 @@ class TestImpact(unittest.TestCase):
         )
         edges = impact(ws)
         self.assertEqual(edges, [])
+
+
+class TestLiquidDamage(unittest.TestCase):
+    def test_liquid_on_electronics_emits_damage(self):
+        coffee = Entity(id="coffee", type="liquid", properties={"conductive": True})
+        laptop = Entity(id="laptop", type="laptop", properties={"electronic": True})
+        ws = WorldState(
+            entities={"coffee": coffee, "laptop": laptop},
+            relations=(Relation("WILL_CONTACT", "coffee", "laptop"),),
+        )
+        edges = liquid_damage(ws)
+        effects = [e.effect for e in edges]
+        self.assertIn("laptop.damaged", effects)
+
+    def test_non_conductive_liquid_does_not_damage(self):
+        oil = Entity(id="oil", type="liquid", properties={"conductive": False})
+        laptop = Entity(id="laptop", type="laptop", properties={"electronic": True})
+        ws = WorldState(
+            entities={"oil": oil, "laptop": laptop},
+            relations=(Relation("WILL_CONTACT", "oil", "laptop"),),
+        )
+        self.assertEqual(liquid_damage(ws), [])
+
+    def test_contained_liquid_links_damage_to_contents_escape(self):
+        """If the liquid has a container, damage depends on the container's contents escaping."""
+        coffee = Entity(id="coffee", type="liquid", properties={"conductive": True})
+        cup = Entity(id="cup", type="cup", properties={"contains": "coffee"})
+        laptop = Entity(id="laptop", type="laptop", properties={"electronic": True})
+        ws = WorldState(
+            entities={"cup": cup, "coffee": coffee, "laptop": laptop},
+            relations=(Relation("WILL_CONTACT", "coffee", "laptop"),),
+        )
+        edges = liquid_damage(ws)
+        self.assertEqual(len(edges), 1)
+        self.assertEqual(edges[0].parents, ("cup.contents_escape",))
+        self.assertEqual(edges[0].effect, "laptop.damaged")
 
 
 if __name__ == "__main__":

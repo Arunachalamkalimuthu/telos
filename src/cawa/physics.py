@@ -96,3 +96,52 @@ def impact(world: WorldState) -> list[CausalEdge]:
                 )
             )
     return edges
+
+
+def liquid_damage(world: WorldState) -> list[CausalEdge]:
+    """Conductive liquid contacting electronics damages them.
+
+    If the liquid is inside a container (some entity's `contains` property
+    equals the liquid's id), damage is conditional on that container's
+    contents escaping — this builds the causal chain
+    `cup.contents_escape → laptop.damaged`. If the liquid has no container,
+    damage is a root effect.
+    """
+    edges: list[CausalEdge] = []
+    for r in world.relations_of("WILL_CONTACT"):
+        src = world.entities.get(r.src)
+        dst = world.entities.get(r.dst)
+        if src is None or dst is None:
+            continue
+        if src.type != "liquid":
+            continue
+        if not src.get("conductive"):
+            continue
+        if not dst.get("electronic"):
+            continue
+        container = None
+        for other in world.entities.values():
+            if other.get("contains") == src.id:
+                container = other
+                break
+        damage_var = f"{dst.id}.damaged"
+        if container is not None:
+            escape_var = f"{container.id}.contents_escape"
+            edges.append(
+                CausalEdge(
+                    parents=(escape_var,),
+                    effect=damage_var,
+                    mechanism=lambda p, ev=escape_var: bool(p[ev]),
+                    label=f"liquid_damage({dst.id})",
+                )
+            )
+        else:
+            edges.append(
+                CausalEdge(
+                    parents=(),
+                    effect=damage_var,
+                    mechanism=lambda _: True,
+                    label=f"liquid_damage({dst.id})",
+                )
+            )
+    return edges
