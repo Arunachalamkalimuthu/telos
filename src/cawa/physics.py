@@ -145,3 +145,23 @@ def liquid_damage(world: WorldState) -> list[CausalEdge]:
                 )
             )
     return edges
+
+
+ALL_PRIMITIVES: list[Callable[[WorldState], list[CausalEdge]]] = [
+    gravity,
+    containment,
+    impact,
+    liquid_damage,
+]
+
+
+def apply_all(
+    world: WorldState,
+    primitives: list[Callable[[WorldState], list[CausalEdge]]] | None = None,
+) -> list[CausalEdge]:
+    """Run every primitive and return the union of emitted causal edges."""
+    primitives = primitives if primitives is not None else ALL_PRIMITIVES
+    edges: list[CausalEdge] = []
+    for prim in primitives:
+        edges.extend(prim(world))
+    return edges

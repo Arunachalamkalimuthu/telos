@@ -1,6 +1,6 @@
 import unittest
 from cawa.world import Entity, Relation, WorldState
-from cawa.physics import gravity, containment, impact, liquid_damage
+from cawa.physics import gravity, containment, impact, liquid_damage, apply_all, ALL_PRIMITIVES
 
 
 class TestGravity(unittest.TestCase):
@@ -149,6 +149,31 @@ class TestLiquidDamage(unittest.TestCase):
         self.assertEqual(len(edges), 1)
         self.assertEqual(edges[0].parents, ("cup.contents_escape",))
         self.assertEqual(edges[0].effect, "laptop.damaged")
+
+
+class TestApplyAll(unittest.TestCase):
+    def test_apply_all_unions_edges_from_all_primitives(self):
+        cup = Entity(
+            id="cup",
+            type="cup",
+            properties={
+                "mass": 0.2,
+                "orientation": "inverted",
+                "sealed": False,
+                "contains": "coffee",
+            },
+        )
+        ws = WorldState(entities={"cup": cup}, relations=())
+        edges = apply_all(ws)
+        labels = {e.label for e in edges}
+        self.assertIn("gravity(cup)", labels)
+        self.assertIn("containment(cup)", labels)
+
+    def test_apply_all_accepts_custom_primitive_list(self):
+        cup = Entity(id="cup", type="cup", properties={"mass": 0.2})
+        ws = WorldState(entities={"cup": cup}, relations=())
+        edges = apply_all(ws, primitives=[ALL_PRIMITIVES[0]])
+        self.assertTrue(all("gravity" in e.label for e in edges))
 
 
 if __name__ == "__main__":
