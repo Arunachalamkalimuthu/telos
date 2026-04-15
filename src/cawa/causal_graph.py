@@ -92,3 +92,20 @@ class CausalGraph:
             parent_values = {p: state[p] for p in edge.parents}
             state[var] = edge.mechanism(parent_values)
         return state
+
+    def do(self, var: str, value: Any) -> "CausalGraph":
+        """Return a new graph with `var` pinned to `value` and its incoming edges severed."""
+        if var not in self._values:
+            raise ValueError(f"unknown variable {var!r}")
+        new = CausalGraph()
+        new._values = dict(self._values)
+        new._values[var] = value
+        new._edges = [e for e in self._edges if e.effect != var]
+        return new
+
+    def counterfactual(self, interventions: Mapping[str, Any]) -> dict[str, Any]:
+        """Apply a set of do-interventions and return the resulting state."""
+        g = self
+        for var, value in interventions.items():
+            g = g.do(var, value)
+        return g.propagate()

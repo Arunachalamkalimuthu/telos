@@ -51,5 +51,36 @@ class TestCausalGraphPropagate(unittest.TestCase):
             g.propagate()
 
 
+class TestCausalGraphIntervention(unittest.TestCase):
+    def test_do_pins_variable_and_severs_incoming(self):
+        g = CausalGraph()
+        g.add_variable("a", initial=3)
+        g.add_variable("b")
+        g.add_mechanism("b", ["a"], lambda p: p["a"] + 1)
+        g2 = g.do("b", 100)
+        # Original graph untouched.
+        self.assertEqual(g.propagate()["b"], 4)
+        # Intervened graph: b is pinned regardless of a.
+        self.assertEqual(g2.propagate()["b"], 100)
+        # And b has no incoming edges anymore.
+        self.assertEqual(g2.edges_into("b"), [])
+
+    def test_counterfactual_multiple_interventions(self):
+        g = CausalGraph()
+        g.add_variable("gravity", initial=True)
+        g.add_variable("sealed", initial=False)
+        g.add_variable("spill")
+        g.add_mechanism(
+            "spill",
+            ["gravity", "sealed"],
+            lambda p: p["gravity"] and not p["sealed"],
+        )
+        self.assertTrue(g.propagate()["spill"])
+        # Counterfactual 1: sealed=True → no spill.
+        self.assertFalse(g.counterfactual({"sealed": True})["spill"])
+        # Counterfactual 2: gravity=False → no spill.
+        self.assertFalse(g.counterfactual({"gravity": False})["spill"])
+
+
 if __name__ == "__main__":
     unittest.main()
