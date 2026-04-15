@@ -38,5 +38,18 @@ class TestSaltRequestExample(unittest.TestCase):
         self.assertIn("cast", out.lower())
 
 
+class TestNovelEntityExample(unittest.TestCase):
+    def test_novel_entity_applies_physics_and_flags_unknown(self):
+        buf = StringIO()
+        with redirect_stdout(buf):
+            mod = importlib.import_module("examples.novel_entity")
+            mod.run()
+        out = buf.getvalue()
+        self.assertIn("frambulator", out.lower())
+        self.assertIn("glorbic_index", out.lower())
+        self.assertIn("unknown", out.lower())
+        self.assertIn("falls", out.lower())
+
+
 if __name__ == "__main__":
     unittest.main()
