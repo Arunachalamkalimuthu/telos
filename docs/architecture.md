@@ -1,8 +1,8 @@
-# CAWA Architecture — Article to Code Map
+# CAWA Architecture
 
-This document maps each claim from the Medium article *Beyond Token Prediction: How LLMs, JEPA, and CAWA See the World Differently* to where that claim is realised (or honestly scoped) in this codebase.
+This document maps each architectural claim to where it is realised (or honestly scoped) in this codebase.
 
-## Article claim → code
+## Claim → code
 
 | Article claim | Code location | Status |
 |---|---|---|

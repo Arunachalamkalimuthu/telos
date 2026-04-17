@@ -1,6 +1,6 @@
 # telos
 
-A Python reference implementation of the **Causal Active World Architecture (CAWA)** described in the Medium article *[Beyond Token Prediction: How LLMs, JEPA, and CAWA See the World Differently](https://medium.com/@arunachalamk)*.
+A Python reference implementation of the **Causal Active World Architecture (CAWA)**.
 
 The name — Greek for "goal" or "purpose" — reflects the goal-directed action-selection at the heart of active inference.
 

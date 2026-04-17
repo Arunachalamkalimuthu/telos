@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a runnable Python reference implementation of CAWA (Causal Active World Architecture) demonstrating the architectural principles from the Medium article on four closed-domain scenarios.
+**Goal:** Build a runnable Python reference implementation of CAWA (Causal Active World Architecture) demonstrating the architectural principles on four closed-domain scenarios.
 
 **Architecture:** Six-module Python package — `world` (state), `physics` (axiomatic primitives), `causal_graph` (DAG + do-calculus), `theory_of_mind` (agent minds), `active_inference` (EFE planner), `agent` (orchestration). Four example scripts. Pure symbolic, no runtime dependencies outside the standard library.
 
@@ -112,7 +112,7 @@ clean:
 ```markdown
 # CAWA — Causal Active World Architecture
 
-A Python reference implementation of the architecture described in the Medium article *Beyond Token Prediction: How LLMs, JEPA, and CAWA See the World Differently*.
+A Python reference implementation of the Causal Active World Architecture (CAWA).
 
 **This is not AGI.** This is a closed-domain proof that causal graphs, physics primitives, theory of mind, and active inference compose cleanly into a working agent. See `docs/architecture.md` for an honest accounting of what this does and does not demonstrate.
 
@@ -2482,11 +2482,11 @@ git commit -m "examples: add novel_entity scenario (honest uncertainty)"
 Create `docs/architecture.md`:
 
 ```markdown
-# CAWA Architecture — Article to Code Map
+# CAWA Architecture
 
-This document maps each claim from the Medium article *Beyond Token Prediction: How LLMs, JEPA, and CAWA See the World Differently* to where that claim is realised (or honestly scoped) in this codebase.
+This document maps each architectural claim to where it is realised (or honestly scoped) in this codebase.
 
-## Article claim → code
+## Claim → code
 
 | Article claim | Code location | Status |
 |---|---|---|

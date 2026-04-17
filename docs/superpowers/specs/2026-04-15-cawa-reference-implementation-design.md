@@ -8,7 +8,7 @@
 
 ## 1. Motivation
 
-The Medium article *Beyond Token Prediction: How LLMs, JEPA, and CAWA See the World Differently* argues that a Causal Active World Architecture (CAWA) — combining causal graphs, physics primitives, theory of mind, and active inference — answers a fundamentally different question from LLMs or JEPA. The article acknowledges that CAWA does not exist as a complete system and is a long-horizon research programme.
+The Causal Active World Architecture (CAWA) — combining causal graphs, physics primitives, theory of mind, and active inference — answers a fundamentally different question from LLMs or JEPA. CAWA does not exist as a complete system and is a long-horizon research programme.
 
 This project builds a **reference implementation** that makes the architectural argument concrete and runnable. It is not an attempt to replace LLMs or JEPA. It is a proof that the four architectural ideas compose cleanly into a working agent on a closed domain, with honest accounting of what the approach does and does not cover.
 
