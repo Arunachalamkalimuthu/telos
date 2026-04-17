@@ -161,7 +161,7 @@ This is a reference implementation demonstrating architectural composition, not 
 
 **Perception:** Detects objects and infers physics properties from a knowledge base (40+ COCO classes mapped to mass, fragility, conductivity, etc.). Heuristic monocular depth estimation from bbox geometry adds IN_FRONT_OF/BEHIND relations. Video processing with IoU-based object tracking detects appearances, disappearances, and movement. Depth estimation is heuristic, not model-based. Property KB covers common objects but not all COCO classes.
 
-**NLU:** Pattern-based extraction via dependency parsing. Handles simple spatial sentences. Does not handle negation, quantifiers, or complex clauses. Parsed entities lack physics properties.
+**NLU:** Dependency parsing with negation detection, quantifier extraction, and physics property mapping (adjectives like "ceramic" → `fragile=True`). Queries parse into executable interventions that wire directly into `CausalGraph.counterfactual()` via `execute_query()`. Handles simple and compound spatial sentences. Complex clauses, relative clauses, and coreference remain unsupported.
 
 See [`docs/architecture.md`](docs/architecture.md) for the full claim-to-code map and honest scoping.
 

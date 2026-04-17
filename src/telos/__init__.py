@@ -7,7 +7,10 @@ from .physics import ALL_PRIMITIVES, apply_all, containment, gravity, impact, li
 from .theory_of_mind import AgentMind, Intervention, intervention_effect, predict_action
 from .world import UNKNOWN, Entity, Relation, WorldState
 from .structure_learner import compare_graphs, generate_samples, has_latent_edges, learn_graph
-from .nlu import load_model, parse_query, parse_scene
+from .nlu import (
+    execute_query, load_model, map_properties, parse_query, parse_scene,
+    ADJECTIVE_PROPERTY_MAP, NOUN_PROPERTY_MAP,
+)
 from .perception import (
     build_world, detect_objects, estimate_depth, extract_relations,
     get_physics_properties, process_video, track_objects, PROPERTY_KB,
@@ -48,5 +51,9 @@ __all__ = [
     "build_world",
     "parse_scene",
     "parse_query",
+    "execute_query",
+    "map_properties",
     "load_model",
+    "ADJECTIVE_PROPERTY_MAP",
+    "NOUN_PROPERTY_MAP",
 ]
