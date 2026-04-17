@@ -125,7 +125,7 @@ src/telos/
 ├── theory_of_mind.py      # AgentMind, predict_action (from beliefs), intervention_effect
 ├── active_inference.py    # EFE = -(pragmatic + epistemic), action selection
 ├── agent.py               # CAWAAgent orchestrator
-├── structure_learner.py   # PC algorithm → CausalGraph (causal-learn)
+├── structure_learner.py   # PC / FCI / GES → CausalGraph (causal-learn)
 ├── perception.py          # YOLOv8-nano → WorldState (ultralytics)
 └── nlu.py                 # text → WorldState / queries (spaCy)
 ```
@@ -157,7 +157,7 @@ This is a reference implementation demonstrating architectural composition, not 
 
 **Core:** Causal graphs and belief states are hand-built per scene. Physics primitives are hand-coded axioms — extensible but closed-domain. No learning, no perception, no language in the core loop.
 
-**Structure Learner:** Works on small variable sets with synthetic linear data. No hidden variable support. The PC algorithm recovers skeleton but may not orient all edges.
+**Structure Learner:** Supports three algorithms (PC, FCI, GES) and both linear (Fisher-Z) and nonlinear (KCI) independence tests. FCI handles latent confounders. Tested on graphs up to 6 variables. Does not yet scale to hundreds of variables or learn from raw time-series data.
 
 **Perception:** Detects objects but does not infer physics properties (mass, fragility, conductivity). Spatial relations are bounding-box heuristics. Single frame only.
 

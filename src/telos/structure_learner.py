@@ -1,8 +1,18 @@
-"""Learn causal structure from data via the PC algorithm (causal-learn)."""
+"""Learn causal structure from data via constraint-based and score-based algorithms.
+
+Supports three discovery algorithms from causal-learn:
+- **PC** (default): constraint-based, recovers skeleton + partial orientation
+- **FCI**: constraint-based, handles latent confounders (outputs PAG)
+- **GES**: score-based, better edge orientation than PC on observational data
+
+Supports two independence tests:
+- **fisherz** (default): fast, assumes linear relationships
+- **kci**: kernel-based, handles nonlinear relationships (slower)
+"""
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, Literal
 
 import numpy as np
 
@@ -11,22 +21,33 @@ from .physics import apply_all, ALL_PRIMITIVES
 from .world import WorldState
 
 
+# ---------------------------------------------------------------------------
+# Sample generation
+# ---------------------------------------------------------------------------
+
 def generate_samples(
     world: WorldState,
     primitives: list[Callable[[WorldState], list[CausalEdge]]] | None = None,
     n: int = 500,
     seed: int = 42,
+    nonlinear: bool = False,
 ) -> tuple[np.ndarray, list[str]]:
-    """Perturb root variables randomly, propagate through physics edges.
+    """Generate observational data by perturbing a world state and running physics.
 
     Root variables (those whose physics edges have no parents) are sampled
     from a standard normal distribution.  Non-root variables are computed
-    from a linear combination of their parents plus small Gaussian noise,
-    preserving the causal structure while giving the PC algorithm enough
-    signal to recover edges.
+    from their parents plus noise.
 
-    Returns ``(samples, variable_names)`` where *samples* has shape
-    ``(n, num_vars)`` and *variable_names* lists each column's name.
+    Args:
+        world: The scene to sample from.
+        primitives: Physics primitives to apply. Defaults to ALL_PRIMITIVES.
+        n: Number of samples.
+        seed: Random seed for reproducibility.
+        nonlinear: If True, use nonlinear transformations (tanh, quadratic)
+            between parent and child variables. If False, use linear combinations.
+
+    Returns:
+        (samples, variable_names) where samples has shape (n, num_vars).
     """
     primitives = primitives if primitives is not None else ALL_PRIMITIVES
 
@@ -70,10 +91,17 @@ def generate_samples(
         parent_map[edge.effect] = list(edge.parents)
 
     rng = np.random.default_rng(seed)
+
+    # Generate stable coefficients per edge for consistency across samples.
+    edge_coeffs: dict[str, list[float]] = {}
+    for var, parents in parent_map.items():
+        edge_coeffs[var] = [rng.uniform(1.0, 3.0) for _ in parents]
+
     samples = np.empty((n, num_vars), dtype=float)
 
     for row in range(n):
         vals: dict[str, float] = {}
+
         # Sample root variables from standard normal.
         for var in variable_names:
             if var in root_vars:
@@ -85,11 +113,20 @@ def generate_samples(
                 continue
             parents = parent_map.get(var)
             if parents is None:
-                # Variable appears in the graph but has no edge — treat as root.
                 vals[var] = float(rng.standard_normal())
                 continue
-            # Linear combination of parent values plus noise.
-            val = sum(vals.get(p, 0.0) for p in parents) + rng.standard_normal() * 0.1
+
+            coeffs = edge_coeffs[var]
+            noise = rng.standard_normal() * 0.1
+
+            if nonlinear:
+                # Nonlinear: tanh of weighted sum + quadratic interaction.
+                weighted = sum(c * vals.get(p, 0.0) for c, p in zip(coeffs, parents))
+                val = np.tanh(weighted) + 0.3 * weighted ** 2 + noise
+            else:
+                # Linear combination of parent values.
+                val = sum(c * vals.get(p, 0.0) for c, p in zip(coeffs, parents)) + noise
+
             vals[var] = val
 
         for name in variable_names:
@@ -98,19 +135,37 @@ def generate_samples(
     return samples, variable_names
 
 
+# ---------------------------------------------------------------------------
+# Graph learning
+# ---------------------------------------------------------------------------
+
 def learn_graph(
     samples: np.ndarray,
     variable_names: list[str],
     alpha: float = 0.05,
+    method: Literal["pc", "fci", "ges"] = "pc",
+    indep_test: Literal["fisherz", "kci"] = "fisherz",
 ) -> CausalGraph:
-    """Run the PC algorithm and convert the result to a telos CausalGraph.
+    """Discover causal structure from observational data.
 
-    Uses Fisher-Z conditional independence test from *causal-learn*.
-    Directed edges are preserved as-is.  Undirected edges (where PC cannot
-    determine orientation) are added in both directions.
+    Args:
+        samples: (n_samples, n_variables) array of observations.
+        variable_names: Name for each column.
+        alpha: Significance level for conditional independence tests (PC/FCI).
+        method: Discovery algorithm.
+            - "pc": Peter-Clark algorithm. Fast, assumes no latent confounders.
+            - "fci": Fast Causal Inference. Handles latent confounders, outputs PAG.
+            - "ges": Greedy Equivalence Search. Score-based, better orientation.
+        indep_test: Independence test for PC/FCI.
+            - "fisherz": assumes linear Gaussian. Fast.
+            - "kci": kernel-based, handles nonlinear. Slower.
+
+    Returns:
+        A telos CausalGraph. Directed edges become mechanisms.
+        Undirected edges (PC) are added in both directions.
+        Bidirected edges (FCI, indicating latent confounders) are stored
+        with a "latent:" label prefix.
     """
-    from causallearn.search.ConstraintBased.PC import pc
-
     graph = CausalGraph()
     for name in variable_names:
         graph.add_variable(name)
@@ -119,15 +174,35 @@ def learn_graph(
     if n_vars < 2 or samples.shape[0] < 3:
         return graph
 
+    if method == "pc":
+        return _learn_pc(samples, variable_names, alpha, indep_test, graph)
+    elif method == "fci":
+        return _learn_fci(samples, variable_names, alpha, indep_test, graph)
+    elif method == "ges":
+        return _learn_ges(samples, variable_names, graph)
+    else:
+        raise ValueError(f"unknown method: {method!r}")
+
+
+def _learn_pc(
+    samples: np.ndarray,
+    variable_names: list[str],
+    alpha: float,
+    indep_test: str,
+    graph: CausalGraph,
+) -> CausalGraph:
+    """PC algorithm: constraint-based, no latent confounders."""
+    from causallearn.search.ConstraintBased.PC import pc
+
     result = pc(
         samples,
         alpha=alpha,
-        indep_test="fisherz",
+        indep_test=indep_test,
         node_names=variable_names,
         show_progress=False,
     )
-
-    adj = result.G.graph  # shape (n_vars, n_vars)
+    adj = result.G.graph
+    n_vars = len(variable_names)
 
     for i in range(n_vars):
         for j in range(i + 1, n_vars):
@@ -135,38 +210,121 @@ def learn_graph(
             val_ji = adj[j, i]
 
             if val_ij == -1 and val_ji == 1:
-                # Directed edge i -> j
-                graph.add_mechanism(
-                    variable_names[j],
-                    [variable_names[i]],
-                    mechanism=lambda p, _p=variable_names[i]: p[_p],
-                    label=f"learned:{variable_names[i]}->{variable_names[j]}",
-                )
+                # Directed: i -> j
+                _add_learned_edge(graph, variable_names[i], variable_names[j], "pc")
             elif val_ij == 1 and val_ji == -1:
-                # Directed edge j -> i
-                graph.add_mechanism(
-                    variable_names[i],
-                    [variable_names[j]],
-                    mechanism=lambda p, _p=variable_names[j]: p[_p],
-                    label=f"learned:{variable_names[j]}->{variable_names[i]}",
-                )
+                # Directed: j -> i
+                _add_learned_edge(graph, variable_names[j], variable_names[i], "pc")
             elif val_ij == -1 and val_ji == -1:
-                # Undirected edge i -- j: add in both directions.
-                graph.add_mechanism(
-                    variable_names[j],
-                    [variable_names[i]],
-                    mechanism=lambda p, _p=variable_names[i]: p[_p],
-                    label=f"learned:{variable_names[i]}--{variable_names[j]}",
-                )
-                graph.add_mechanism(
-                    variable_names[i],
-                    [variable_names[j]],
-                    mechanism=lambda p, _p=variable_names[j]: p[_p],
-                    label=f"learned:{variable_names[j]}--{variable_names[i]}",
-                )
+                # Undirected: add both directions.
+                _add_learned_edge(graph, variable_names[i], variable_names[j], "pc:undirected")
+                _add_learned_edge(graph, variable_names[j], variable_names[i], "pc:undirected")
 
     return graph
 
+
+def _learn_fci(
+    samples: np.ndarray,
+    variable_names: list[str],
+    alpha: float,
+    indep_test: str,
+    graph: CausalGraph,
+) -> CausalGraph:
+    """FCI algorithm: handles latent confounders, outputs PAG.
+
+    PAG edge types in causal-learn adjacency matrix:
+    - adj[i,j]=-1, adj[j,i]=1  → i -> j  (directed)
+    - adj[i,j]=1, adj[j,i]=-1  → j -> i  (directed)
+    - adj[i,j]=1, adj[j,i]=1   → i <-> j (bidirected, latent confounder)
+    - adj[i,j]=2, adj[j,i]=1   → i o-> j (partially oriented)
+    - adj[i,j]=2, adj[j,i]=2   → i o-o j (unoriented)
+    """
+    from causallearn.search.ConstraintBased.FCI import fci
+
+    g, edges = fci(
+        samples,
+        independence_test_method=indep_test,
+        alpha=alpha,
+        show_progress=False,
+    )
+    adj = g.graph
+    n_vars = len(variable_names)
+
+    for i in range(n_vars):
+        for j in range(i + 1, n_vars):
+            val_ij = adj[i, j]
+            val_ji = adj[j, i]
+
+            if val_ij == 0 and val_ji == 0:
+                continue
+
+            if val_ij == -1 and val_ji == 1:
+                _add_learned_edge(graph, variable_names[i], variable_names[j], "fci")
+            elif val_ij == 1 and val_ji == -1:
+                _add_learned_edge(graph, variable_names[j], variable_names[i], "fci")
+            elif val_ij == 1 and val_ji == 1:
+                # Bidirected: latent confounder between i and j.
+                _add_learned_edge(graph, variable_names[i], variable_names[j], "latent:fci")
+                _add_learned_edge(graph, variable_names[j], variable_names[i], "latent:fci")
+            elif val_ij == 2 and val_ji == 1:
+                # Partially oriented: o-> (i toward j).
+                _add_learned_edge(graph, variable_names[i], variable_names[j], "fci:partial")
+            elif val_ij == 1 and val_ji == 2:
+                _add_learned_edge(graph, variable_names[j], variable_names[i], "fci:partial")
+            elif val_ij == 2 and val_ji == 2:
+                # Unoriented circle-circle.
+                _add_learned_edge(graph, variable_names[i], variable_names[j], "fci:unoriented")
+                _add_learned_edge(graph, variable_names[j], variable_names[i], "fci:unoriented")
+
+    return graph
+
+
+def _learn_ges(
+    samples: np.ndarray,
+    variable_names: list[str],
+    graph: CausalGraph,
+) -> CausalGraph:
+    """GES algorithm: score-based, often orients more edges than PC."""
+    from causallearn.search.ScoreBased.GES import ges
+
+    result = ges(samples, score_func="local_score_CV_general")
+    adj = result["G"].graph
+    n_vars = len(variable_names)
+
+    for i in range(n_vars):
+        for j in range(i + 1, n_vars):
+            val_ij = adj[i, j]
+            val_ji = adj[j, i]
+
+            if val_ij == -1 and val_ji == 1:
+                _add_learned_edge(graph, variable_names[i], variable_names[j], "ges")
+            elif val_ij == 1 and val_ji == -1:
+                _add_learned_edge(graph, variable_names[j], variable_names[i], "ges")
+            elif val_ij == -1 and val_ji == -1:
+                _add_learned_edge(graph, variable_names[i], variable_names[j], "ges:undirected")
+                _add_learned_edge(graph, variable_names[j], variable_names[i], "ges:undirected")
+
+    return graph
+
+
+def _add_learned_edge(
+    graph: CausalGraph,
+    parent: str,
+    child: str,
+    label_prefix: str,
+) -> None:
+    """Add a directed mechanism edge from parent to child."""
+    graph.add_mechanism(
+        child,
+        [parent],
+        mechanism=lambda p, _p=parent: p[_p],
+        label=f"{label_prefix}:{parent}->{child}",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Graph comparison
+# ---------------------------------------------------------------------------
 
 def compare_graphs(
     learned: CausalGraph,
@@ -177,12 +335,16 @@ def compare_graphs(
     Returns ``{"precision": ..., "recall": ..., "f1": ...}``.
 
     Each edge is represented as a ``(parent, effect)`` pair.  Multi-parent
-    edges are expanded into one pair per parent.
+    edges are expanded into one pair per parent.  Edges with "latent:" labels
+    are excluded from comparison (they represent hidden confounders, not
+    direct causal links).
     """
 
-    def _edge_set(g: CausalGraph) -> set[tuple[str, str]]:
+    def _edge_set(g: CausalGraph, exclude_latent: bool = True) -> set[tuple[str, str]]:
         pairs: set[tuple[str, str]] = set()
         for edge in g.all_edges():
+            if exclude_latent and edge.label.startswith("latent:"):
+                continue
             for parent in edge.parents:
                 pairs.add((parent, edge.effect))
         return pairs
@@ -204,3 +366,13 @@ def compare_graphs(
         f1 = 0.0
 
     return {"precision": precision, "recall": recall, "f1": f1}
+
+
+def has_latent_edges(graph: CausalGraph) -> list[tuple[str, str]]:
+    """Return pairs of variables connected by latent confounder edges."""
+    latent_pairs: list[tuple[str, str]] = []
+    for edge in graph.all_edges():
+        if edge.label.startswith("latent:"):
+            for parent in edge.parents:
+                latent_pairs.append((parent, edge.effect))
+    return latent_pairs
