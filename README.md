@@ -159,7 +159,7 @@ This is a reference implementation demonstrating architectural composition, not 
 
 **Structure Learner:** Supports three algorithms (PC, FCI, GES) and both linear (Fisher-Z) and nonlinear (KCI) independence tests. FCI handles latent confounders. Tested on graphs up to 6 variables. Does not yet scale to hundreds of variables or learn from raw time-series data.
 
-**Perception:** Detects objects but does not infer physics properties (mass, fragility, conductivity). Spatial relations are bounding-box heuristics. Single frame only.
+**Perception:** Detects objects and infers physics properties from a knowledge base (40+ COCO classes mapped to mass, fragility, conductivity, etc.). Heuristic monocular depth estimation from bbox geometry adds IN_FRONT_OF/BEHIND relations. Video processing with IoU-based object tracking detects appearances, disappearances, and movement. Depth estimation is heuristic, not model-based. Property KB covers common objects but not all COCO classes.
 
 **NLU:** Pattern-based extraction via dependency parsing. Handles simple spatial sentences. Does not handle negation, quantifiers, or complex clauses. Parsed entities lack physics properties.
 

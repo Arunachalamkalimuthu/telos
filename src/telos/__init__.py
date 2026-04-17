@@ -8,7 +8,10 @@ from .theory_of_mind import AgentMind, Intervention, intervention_effect, predic
 from .world import UNKNOWN, Entity, Relation, WorldState
 from .structure_learner import compare_graphs, generate_samples, has_latent_edges, learn_graph
 from .nlu import load_model, parse_query, parse_scene
-from .perception import build_world, detect_objects, extract_relations
+from .perception import (
+    build_world, detect_objects, estimate_depth, extract_relations,
+    get_physics_properties, process_video, track_objects, PROPERTY_KB,
+)
 
 __all__ = [
     "UNKNOWN",
@@ -37,6 +40,11 @@ __all__ = [
     "has_latent_edges",
     "detect_objects",
     "extract_relations",
+    "estimate_depth",
+    "get_physics_properties",
+    "track_objects",
+    "process_video",
+    "PROPERTY_KB",
     "build_world",
     "parse_scene",
     "parse_query",
