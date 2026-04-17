@@ -13,6 +13,10 @@ demo:
 	@PYTHONPATH=src $(PYTHON) -m examples.salt_request
 	@echo
 	@PYTHONPATH=src $(PYTHON) -m examples.novel_entity
+	@echo
+	@PYTHONPATH=src $(PYTHON) -m examples.learned_structure
+	@echo
+	@PYTHONPATH=src $(PYTHON) -m examples.nlu_demo
 
 install:
 	$(PYTHON) -m pip install -e .
