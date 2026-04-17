@@ -1,116 +1,171 @@
 # telos
 
-A Python reference implementation of the **Causal Active World Architecture (CAWA)**.
+**Causal Active World Architecture (CAWA)** — a cognitive architecture that reasons about the physical world through causal graphs, physics axioms, theory of mind, and active inference.
 
-The name — Greek for "goal" or "purpose" — reflects the goal-directed action-selection at the heart of active inference.
+*telos* (Greek: "goal", "purpose") — named for the goal-directed action-selection at the heart of the system.
 
-**This is not AGI.** It is a closed-domain proof that causal graphs, physics primitives, theory of mind, and active inference compose cleanly into a working agent — plus prototypes for learned structure, perception, and natural language understanding. See [`docs/architecture.md`](docs/architecture.md) for an honest accounting of what this does and does not demonstrate.
+---
+
+## What This Is
+
+An agent that **understands why things happen**, not just what happens next.
+
+Given a scene — a cup on a laptop, a child near a road, a dinner-table request — telos builds a causal model, simulates interventions, predicts other agents' behaviour from their beliefs (not ground truth), and selects actions that minimise expected free energy.
+
+```
+Scene → WorldState → Causal Graph → Active Inference → Action + Explanation
+```
+
+**What it is not:** This is not AGI. It is a closed-domain proof of concept demonstrating that causal reasoning, physics simulation, theory of mind, and active inference compose into a coherent cognitive architecture.
+
+---
 
 ## Install
 
 ```bash
 git clone https://github.com/Arunachalamkalimuthu/telos.git
 cd telos
-make install   # installs dependencies + spaCy model
+make install
 ```
 
-Requires **Python 3.10+**.
+Requires **Python 3.10+**. Installs `causal-learn`, `ultralytics`, `spacy`, and the `en_core_web_sm` language model.
 
-## Quickstart
+## Run
 
 ```bash
-make test      # run all 72 tests
-make demo      # run all 6 example scenarios
+make test       # 72 tests
+make demo       # all scenarios
 ```
 
-## How It Works
+---
+
+## The Agent Pipeline
 
 ```
 perceive(WorldState)
-    → build_causal_graph (physics primitives → CausalEdge DAG)
-    → plan (active inference: minimise expected free energy)
-    → explain (causal chain + counterfactuals)
+    │
+    ▼
+build_causal_graph()          # physics axioms emit CausalEdges into a DAG
+    │
+    ▼
+plan(goal, actions)           # expected free energy minimisation
+    │                         # EFE = -(pragmatic + epistemic)
+    ▼
+explain(plan)                 # causal chain + counterfactual predictions
 ```
 
-The agent receives a `WorldState` (entities + relations), applies physics primitives to construct a causal graph, selects actions via expected free energy minimisation, and explains its reasoning through causal chains and counterfactual predictions.
+**Example:** An inverted coffee cup sits on a laptop.
 
-## Examples
+```python
+from telos import CAWAAgent, Entity, Relation, WorldState, Action
 
-### Core Scenarios
+cup = Entity(id="cup", type="cup", properties={
+    "mass": 0.25, "orientation": "inverted",
+    "sealed": False, "contains": "coffee", "material": "ceramic",
+})
+coffee = Entity(id="coffee", type="liquid", properties={"conductive": True})
+laptop = Entity(id="laptop", type="laptop", properties={"electronic": True})
 
-| Example | Demonstrates |
-|---------|-------------|
-| [`coffee_cup.py`](examples/coffee_cup.py) | Physics primitives compose into a causal chain; counterfactuals propagate via do-operator |
-| [`child_road.py`](examples/child_road.py) | Theory of mind — predicts a deaf child's action from their (wrong) beliefs; selects physical intercept over verbal signal |
-| [`salt_request.py`](examples/salt_request.py) | Social inference — "Can you pass the salt?" interpreted as request, not capability question, based on asker's belief state |
-| [`novel_entity.py`](examples/novel_entity.py) | Physics applies to unknown entities; unknown properties are flagged, not hallucinated |
+world = WorldState(
+    entities={"cup": cup, "coffee": coffee, "laptop": laptop},
+    relations=(Relation("ON", "cup", "laptop"), Relation("WILL_CONTACT", "coffee", "laptop")),
+)
 
-### Prototype Scenarios
+agent = CAWAAgent()
+agent.perceive(world)
+graph = agent.build_causal_graph()
 
-| Example | Demonstrates |
-|---------|-------------|
-| [`learned_structure.py`](examples/learned_structure.py) | PC algorithm recovers causal edges from observational data; precision/recall against hand-built graph |
-| [`perception_demo.py`](examples/perception_demo.py) | YOLOv8-nano detects objects in an image → spatial relations → WorldState |
-| [`nlu_demo.py`](examples/nlu_demo.py) | Natural language scene descriptions and questions parsed into WorldState and structured queries |
+# The agent discovers: cup inverted → contents escape → liquid contacts laptop → damage
+state = graph.propagate()
+# {'laptop.falls': True, 'cup.contents_escape': True, 'laptop.damaged': True}
 
-Run any example individually:
+# Counterfactual: what if we sealed the cup?
+graph.counterfactual({"cup.contents_escape": False})
+# {'laptop.falls': True, 'cup.contents_escape': False, 'laptop.damaged': False}
+```
+
+The agent reasons through the causal chain, identifies that sealing the cup breaks the damage pathway, and selects it as the optimal intervention.
+
+---
+
+## Scenarios
+
+### Core
+
+| Scenario | What It Demonstrates |
+|----------|---------------------|
+| [**Coffee Cup**](examples/coffee_cup.py) | Physics primitives chain into causal graphs. Counterfactuals propagate correctly via Pearl's do-operator. Sealing the cup breaks the `spill → damage` pathway. |
+| [**Child on Road**](examples/child_road.py) | Theory of mind: the agent predicts a deaf child will run into traffic because *the child believes* the road is safe. Selects physical intercept over shouting (no auditory channel). |
+| [**Salt Request**](examples/salt_request.py) | Social inference: "Can you pass the salt?" is interpreted as a *request*, not a capability question, by reasoning about the asker's beliefs (arm in cast, salt out of reach). |
+| [**Novel Entity**](examples/novel_entity.py) | A "frambulator" with unknown properties falls off a "zibbly". Physics applies (gravity); unknown properties are flagged with `UNKNOWN`, never hallucinated. |
+
+### Prototypes
+
+| Scenario | What It Demonstrates |
+|----------|---------------------|
+| [**Learned Structure**](examples/learned_structure.py) | PC algorithm (causal-learn) recovers the causal DAG from 1000 observational samples. Compares learned graph against hand-built ground truth with precision/recall/F1. |
+| [**Perception**](examples/perception_demo.py) | YOLOv8-nano detects objects in an image, derives spatial relations (ON, NEAR, CONTAINS) from bounding box geometry, and builds a WorldState. |
+| [**NLU**](examples/nlu_demo.py) | spaCy parses "A cup is on a laptop" into entities + relations, and classifies "What happens if the cup falls?" as a counterfactual query. |
 
 ```bash
+# Run individually
 PYTHONPATH=src python3 -m examples.coffee_cup
 PYTHONPATH=src python3 -m examples.perception_demo path/to/image.jpg
 ```
 
+---
+
 ## Architecture
 
-### Core Modules
-
-| Module | Responsibility |
-|--------|---------------|
-| [`world.py`](src/telos/world.py) | Typed entities, relations, immutable snapshots; `UNKNOWN` sentinel for absent properties |
-| [`physics.py`](src/telos/physics.py) | Axiomatic primitives (`gravity`, `containment`, `impact`, `liquid_damage`) that emit causal edges |
-| [`causal_graph.py`](src/telos/causal_graph.py) | DAG with do-calculus (Pearl's do-operator), topological propagation, and causal explanation |
-| [`theory_of_mind.py`](src/telos/theory_of_mind.py) | Agents with beliefs, goals, capabilities; action prediction from beliefs, not ground truth |
-| [`active_inference.py`](src/telos/active_inference.py) | Action selection by expected free energy minimisation: `EFE = -(pragmatic + epistemic)` |
-| [`agent.py`](src/telos/agent.py) | Orchestrator: `perceive → build_causal_graph → plan → explain` |
-
-### Prototype Modules
-
-| Module | Library | Responsibility |
-|--------|---------|---------------|
-| [`structure_learner.py`](src/telos/structure_learner.py) | `causal-learn` | Causal discovery from observational data via PC algorithm |
-| [`perception.py`](src/telos/perception.py) | `ultralytics` | Image → object detection (YOLOv8-nano) → spatial relations → WorldState |
-| [`nlu.py`](src/telos/nlu.py) | `spaCy` | Natural language → WorldState / structured queries via dependency parsing |
-
-## Project Structure
-
 ```
-src/telos/            # library code
-examples/             # runnable scenarios
-tests/                # 72 unit tests
-docs/architecture.md  # article-to-code map + honest scoping
+src/telos/
+├── world.py               # Entity, Relation, WorldState, UNKNOWN sentinel
+├── physics.py             # gravity, containment, impact, liquid_damage → CausalEdges
+├── causal_graph.py        # DAG + do-calculus + topological propagation + explain
+├── theory_of_mind.py      # AgentMind, predict_action (from beliefs), intervention_effect
+├── active_inference.py    # EFE = -(pragmatic + epistemic), action selection
+├── agent.py               # CAWAAgent orchestrator
+├── structure_learner.py   # PC algorithm → CausalGraph (causal-learn)
+├── perception.py          # YOLOv8-nano → WorldState (ultralytics)
+└── nlu.py                 # text → WorldState / queries (spaCy)
 ```
+
+### Design Principles
+
+- **Immutable state.** `WorldState`, `Entity`, `Relation` are frozen dataclasses. State transitions produce new objects.
+- **Composable primitives.** Physics rules are pure functions `WorldState → list[CausalEdge]`. New physics = new function, same interface.
+- **Pearl's do-calculus.** Interventions sever incoming edges. Counterfactuals propagate through the modified graph.
+- **Belief-based prediction.** Theory of mind predicts actions from the *agent's own beliefs*, not ground truth. A deaf child who believes the road is safe will run.
+- **Expected free energy.** Actions are scored by `EFE = -(pragmatic + epistemic)`. The agent prefers actions that achieve goals *and* resolve uncertainty.
+- **Honest uncertainty.** Unknown properties return `UNKNOWN`, never a guess. The system refuses to reason about what it doesn't know.
+
+---
 
 ## Dependencies
 
-| Package | Purpose |
-|---------|---------|
-| `causal-learn` | PC algorithm for causal structure discovery |
-| `ultralytics` | YOLOv8-nano object detection |
-| `spacy` + `en_core_web_sm` | Dependency parsing for NLU |
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `causal-learn` | 0.1.x | PC algorithm for causal structure discovery |
+| `ultralytics` | 8.x | YOLOv8-nano object detection |
+| `spacy` | 3.x | Dependency parsing for NLU |
 
-All installed via `make install`.
+---
 
 ## Limitations
 
-This is a reference implementation, not a production system.
+This is a reference implementation demonstrating architectural composition, not a production system.
 
-- **Core modules** are pure symbolic, hand-coded, closed-domain. Causal graphs and belief states are hand-built per scene.
-- **Structure learner** works on small variable sets with synthetic linear data. No hidden variable support.
-- **Perception** detects objects but doesn't infer physics properties (mass, fragility). Single-frame only, no video.
-- **NLU** is pattern-based. Misses complex sentences, negation, and doesn't map parsed entities to physics properties automatically.
-- No end-to-end pipeline connecting perception → NLU → causal reasoning.
+**Core:** Causal graphs and belief states are hand-built per scene. Physics primitives are hand-coded axioms — extensible but closed-domain. No learning, no perception, no language in the core loop.
 
-See [`docs/architecture.md`](docs/architecture.md) for the full article-to-code map and what is explicitly out of scope.
+**Structure Learner:** Works on small variable sets with synthetic linear data. No hidden variable support. The PC algorithm recovers skeleton but may not orient all edges.
+
+**Perception:** Detects objects but does not infer physics properties (mass, fragility, conductivity). Spatial relations are bounding-box heuristics. Single frame only.
+
+**NLU:** Pattern-based extraction via dependency parsing. Handles simple spatial sentences. Does not handle negation, quantifiers, or complex clauses. Parsed entities lack physics properties.
+
+See [`docs/architecture.md`](docs/architecture.md) for the full claim-to-code map and honest scoping.
+
+---
 
 ## License
 
