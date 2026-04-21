@@ -4,14 +4,26 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "telos"
-version = "0.1.0"
-description = "telos — a reference implementation of the Causal Active World Architecture (CAWA)"
+version = "0.2.0"
+description = "telos — causal impact analyzer for codebases"
 requires-python = ">=3.10"
 dependencies = [
     "causal-learn",
     "ultralytics",
     "spacy",
+    "typer",
+    "rich",
+    "tree-sitter",
+    "tree-sitter-python",
+    "tree-sitter-javascript",
+    "tree-sitter-typescript",
+    "tree-sitter-go",
+    "tree-sitter-java",
+    "tree-sitter-rust",
 ]
+
+[project.scripts]
+telos = "telos.cli:app"
 
 [tool.setuptools.packages.find]
 where = ["src"]
