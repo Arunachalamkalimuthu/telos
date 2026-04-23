@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "telos"
-version = "0.2.0"
-description = "telos — causal impact analyzer for codebases"
+version = "0.3.0"
+description = "telos — reasoning and memory layer for AI coding assistants (causal impact + event graph + git history)"
 requires-python = ">=3.10"
 dependencies = [
     "causal-learn",
