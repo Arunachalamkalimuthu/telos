@@ -1,22 +1,27 @@
 # telos
 
-**Causal Active World Architecture (CAWA)** — a cognitive architecture that reasons about the physical world through causal graphs, physics axioms, theory of mind, and active inference.
+**The reasoning and memory layer for AI coding assistants.**
 
-*telos* (Greek: "goal", "purpose") — named for the goal-directed action-selection at the heart of the system.
+Telos makes any LLM (Claude Code, Cursor, Copilot) provably aware of what its code changes will break, why past decisions were made, and who knows each part of the codebase — by building a causal graph over your code, a persistent event graph over your decisions, and a history graph from your git log.
+
+> *telos* (Greek: "goal", "purpose") — named for the goal-directed action-selection at the heart of the system.
 
 ---
 
-## What This Is
+## What It Solves
 
-An agent that **understands why things happen**, not just what happens next.
+LLMs write plausible code. Telos tells you what that code will actually do.
 
-Given a scene — a cup on a laptop, a child near a road, a dinner-table request — telos builds a causal model, simulates interventions, predicts other agents' behaviour from their beliefs (not ground truth), and selects actions that minimise expected free energy.
+| Problem | How Telos Solves It |
+|---------|---------------------|
+| "Is this change safe?" | Causal graph — propagates impact through every dependent function |
+| "Why did we make that decision?" | Event graph — traces causal chain back to the root reason |
+| "Which fix is best?" | Counterfactual analysis — simulates each option's blast radius |
+| "Who should review this?" | Developer model — finds contributors with expertise in the file |
+| "What tends to break in this area?" | Git history — learns co-changes and bug-prone files |
+| "I don't know that property" | `UNKNOWN` sentinel — refuses to hallucinate |
 
-```
-Scene → WorldState → Causal Graph → Active Inference → Action + Explanation
-```
-
-**What it is not:** This is not AGI. It is a closed-domain proof of concept demonstrating that causal reasoning, physics simulation, theory of mind, and active inference compose into a coherent cognitive architecture.
+Works on **6 languages**: Python, JavaScript, TypeScript, Go, Java, Rust.
 
 ---
 
@@ -28,145 +33,23 @@ cd telos
 make install
 ```
 
-Requires **Python 3.10+**. Installs `causal-learn`, `ultralytics`, `spacy`, and the `en_core_web_sm` language model.
+Requires **Python 3.10+**. Installs all dependencies plus the spaCy `en_core_web_sm` language model.
 
-## Run
+---
+
+## Quick Start
+
+### CLI
 
 ```bash
-make test       # 72 tests
-make demo       # all scenarios
+telos init                                           # scan repo, build graph
+telos impact src/auth.py:validate_token             # trace impact
+telos impact src/auth.py:validate_token --fix X     # counterfactual
+telos hotspots                                      # most depended-on code
+telos info                                          # graph stats
 ```
 
----
-
-## The Agent Pipeline
-
-```
-perceive(WorldState)
-    │
-    ▼
-build_causal_graph()          # physics axioms emit CausalEdges into a DAG
-    │
-    ▼
-plan(goal, actions)           # expected free energy minimisation
-    │                         # EFE = -(pragmatic + epistemic)
-    ▼
-explain(plan)                 # causal chain + counterfactual predictions
-```
-
-**Example:** An inverted coffee cup sits on a laptop.
-
-```python
-from telos import CAWAAgent, Entity, Relation, WorldState, Action
-
-cup = Entity(id="cup", type="cup", properties={
-    "mass": 0.25, "orientation": "inverted",
-    "sealed": False, "contains": "coffee", "material": "ceramic",
-})
-coffee = Entity(id="coffee", type="liquid", properties={"conductive": True})
-laptop = Entity(id="laptop", type="laptop", properties={"electronic": True})
-
-world = WorldState(
-    entities={"cup": cup, "coffee": coffee, "laptop": laptop},
-    relations=(Relation("ON", "cup", "laptop"), Relation("WILL_CONTACT", "coffee", "laptop")),
-)
-
-agent = CAWAAgent()
-agent.perceive(world)
-graph = agent.build_causal_graph()
-
-# The agent discovers: cup inverted → contents escape → liquid contacts laptop → damage
-state = graph.propagate()
-# {'laptop.falls': True, 'cup.contents_escape': True, 'laptop.damaged': True}
-
-# Counterfactual: what if we sealed the cup?
-graph.counterfactual({"cup.contents_escape": False})
-# {'laptop.falls': True, 'cup.contents_escape': False, 'laptop.damaged': False}
-```
-
-The agent reasons through the causal chain, identifies that sealing the cup breaks the damage pathway, and selects it as the optimal intervention.
-
----
-
-## Scenarios
-
-### Core
-
-| Scenario | What It Demonstrates |
-|----------|---------------------|
-| [**Coffee Cup**](examples/coffee_cup.py) | Physics primitives chain into causal graphs. Counterfactuals propagate correctly via Pearl's do-operator. Sealing the cup breaks the `spill → damage` pathway. |
-| [**Child on Road**](examples/child_road.py) | Theory of mind: the agent predicts a deaf child will run into traffic because *the child believes* the road is safe. Selects physical intercept over shouting (no auditory channel). |
-| [**Salt Request**](examples/salt_request.py) | Social inference: "Can you pass the salt?" is interpreted as a *request*, not a capability question, by reasoning about the asker's beliefs (arm in cast, salt out of reach). |
-| [**Novel Entity**](examples/novel_entity.py) | A "frambulator" with unknown properties falls off a "zibbly". Physics applies (gravity); unknown properties are flagged with `UNKNOWN`, never hallucinated. |
-
-### Prototypes
-
-| Scenario | What It Demonstrates |
-|----------|---------------------|
-| [**Learned Structure**](examples/learned_structure.py) | PC algorithm (causal-learn) recovers the causal DAG from 1000 observational samples. Compares learned graph against hand-built ground truth with precision/recall/F1. |
-| [**Perception**](examples/perception_demo.py) | YOLOv8-nano detects objects in an image, derives spatial relations (ON, NEAR, CONTAINS) from bounding box geometry, and builds a WorldState. |
-| [**NLU**](examples/nlu_demo.py) | spaCy parses "A cup is on a laptop" into entities + relations, and classifies "What happens if the cup falls?" as a counterfactual query. |
-
-```bash
-# Run individually
-PYTHONPATH=src python3 -m examples.coffee_cup
-PYTHONPATH=src python3 -m examples.perception_demo path/to/image.jpg
-```
-
----
-
-## Architecture
-
-```
-src/telos/
-├── world.py               # Entity, Relation, WorldState, UNKNOWN sentinel
-├── physics.py             # gravity, containment, impact, liquid_damage → CausalEdges
-├── causal_graph.py        # DAG + do-calculus + topological propagation + explain
-├── theory_of_mind.py      # AgentMind, predict_action (from beliefs), intervention_effect
-├── active_inference.py    # EFE = -(pragmatic + epistemic), action selection
-├── agent.py               # CAWAAgent orchestrator
-├── structure_learner.py   # PC / FCI / GES → CausalGraph (causal-learn)
-├── perception.py          # YOLOv8-nano → WorldState (ultralytics)
-└── nlu.py                 # text → WorldState / queries (spaCy)
-```
-
-### Design Principles
-
-- **Immutable state.** `WorldState`, `Entity`, `Relation` are frozen dataclasses. State transitions produce new objects.
-- **Composable primitives.** Physics rules are pure functions `WorldState → list[CausalEdge]`. New physics = new function, same interface.
-- **Pearl's do-calculus.** Interventions sever incoming edges. Counterfactuals propagate through the modified graph.
-- **Belief-based prediction.** Theory of mind predicts actions from the *agent's own beliefs*, not ground truth. A deaf child who believes the road is safe will run.
-- **Expected free energy.** Actions are scored by `EFE = -(pragmatic + epistemic)`. The agent prefers actions that achieve goals *and* resolve uncertainty.
-- **Honest uncertainty.** Unknown properties return `UNKNOWN`, never a guess. The system refuses to reason about what it doesn't know.
-
----
-
-## Dependencies
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `causal-learn` | 0.1.x | PC algorithm for causal structure discovery |
-| `ultralytics` | 8.x | YOLOv8-nano object detection |
-| `spacy` | 3.x | Dependency parsing for NLU |
-| `mcp` | 1.x | MCP server for LLM integration |
-
----
-
-## MCP Server (LLM Integration)
-
-Telos runs as an MCP server, letting any LLM (Claude Code, Cursor, etc.) call its tools directly.
-
-### Tools exposed
-
-| Tool | What it does |
-|------|-------------|
-| `telos_init` | Scan codebase, build dependency graph |
-| `telos_impact` | Trace transitive impact of changing a node |
-| `telos_counterfactual` | Compare blast radius with/without intervention |
-| `telos_hotspots` | Show most depended-on code |
-| `telos_info` | Graph statistics and metadata |
-
-### Configure in Claude Code
+### MCP Server (LLM integration)
 
 Add to your Claude Code settings (`~/.claude/settings.json`):
 
@@ -182,32 +65,248 @@ Add to your Claude Code settings (`~/.claude/settings.json`):
 }
 ```
 
-Then in Claude Code, telos tools are available automatically:
-- "What breaks if I change `auth.py:validate_token`?"
-- "Show me the dependency hotspots"
-- "What if we add a fallback at `middleware.py:require_auth`?"
+Claude, Cursor, and other MCP-aware LLMs can now ask telos directly:
+- *"What breaks if I change `validate_token`?"*
+- *"Why did we cap retries at 2?"* (traces back through session memory)
+- *"Who should review changes to `src/payment/`?"*
+- *"What files tend to break together?"*
 
-### Run standalone
+---
+
+## The Four Layers
+
+```
+┌────────────────────────────────────────────────────────────┐
+│                     LLM Interface (Any LLM)                 │
+│          MCP server exposes 19 tools for reasoning           │
+└──────────────┬──────────────────────────────┬───────────────┘
+               │                              │
+┌──────────────▼──────────────┐  ┌───────────▼───────────────┐
+│   Phase 1: Code Graph        │  │   Phase 3: Memory          │
+│                              │  │                            │
+│  • tree-sitter parser         │  │  • event graph             │
+│    (6 languages)              │  │    (sessions, decisions,   │
+│  • SQLite dependency graph    │  │     changes, outcomes)     │
+│  • Impact analyzer            │  │  • project memory          │
+│    (transitive + risk)        │  │    ("why did we...?")      │
+│  • Counterfactual engine      │  │  • cross-session learner   │
+│    (Pearl's do-operator)      │  │    (failure patterns)      │
+└──────────────────────────────┘  └────────────────────────────┘
+               │                              │
+┌──────────────▼──────────────────────────────▼───────────────┐
+│              Phase 4: Learning from History                  │
+│                                                              │
+│  • git learner — co-changes, churn, bug-prone files         │
+│  • developer model — AgentMind profiles from commits         │
+│  • fix evaluator — rank fixes by historical + causal evidence│
+└──────────────────────────────────────────────────────────────┘
+               │
+┌──────────────▼──────────────────────────────────────────────┐
+│              Reference Core (Research Foundation)            │
+│                                                              │
+│  Causal graphs • Physics primitives • Theory of mind •      │
+│  Active inference • Honest uncertainty                       │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## MCP Tools
+
+### Impact Analysis (Phase 1-2)
+
+| Tool | Description |
+|------|-------------|
+| `telos_init` | Scan codebase, build dependency graph |
+| `telos_impact` | Trace full transitive impact of a change |
+| `telos_counterfactual` | Compare blast radius with/without a fix |
+| `telos_hotspots` | Most depended-on code (highest risk) |
+| `telos_info` | Graph statistics and metadata |
+
+### Memory (Phase 3)
+
+| Tool | Description |
+|------|-------------|
+| `telos_memory_start_session` | Begin tracking a work session |
+| `telos_memory_record_decision` | Capture WHY a decision was made |
+| `telos_memory_record_change` | Track what changed and where |
+| `telos_memory_record_outcome` | Record success/failure (auto-links to cause) |
+| `telos_memory_why` | Root cause analysis — trace back through chain |
+| `telos_memory_what_happened` | Full history for any file or function |
+| `telos_memory_patterns` | Cross-session insights across all sessions |
+| `telos_memory_search` | Keyword search across event summaries |
+| `telos_memory_recent` | Most recent events |
+
+### Git History (Phase 4)
+
+| Tool | Description |
+|------|-------------|
+| `telos_history_patterns` | Co-changes, bug-prone files, recent hotspots |
+| `telos_history_bug_prone` | Files with highest historical bug rate |
+| `telos_developer_profile` | Expertise and activity for any contributor |
+| `telos_developer_risk` | Is this developer qualified to change this file? |
+| `telos_suggest_reviewers` | Best reviewers based on git expertise |
+
+---
+
+## Example: CLI Impact Analysis
 
 ```bash
-python -m telos.mcp_server
+$ telos impact src/telos/causal_graph.py:CausalGraph
+
+Impact Analysis: src/telos/causal_graph.py:CausalGraph
+══════════════════════════════════════════════════════
+
+  src/telos/causal_graph.py:CausalGraph
+  ├── CALLS → src/telos/agent.py:build_causal_graph     [risk: 1.0]
+  │   └── CALLS → src/telos/agent.py:plan                [risk: 1.0]
+  ├── CALLS → src/telos/structure_learner.py:learn_graph [risk: 1.0]
+  └── IMPORTS → tests/test_causal_graph.py               [risk: 0.6]
+
+Hottest path: CausalGraph → build_causal_graph → plan
+Files affected: 8
 ```
+
+## Example: Counterfactual
+
+```bash
+$ telos impact validate_token --fix add_fallback_at:middleware.py:require_auth
+
+Without fix:  23 functions across 8 files affected
+With fix:      2 functions across 1 file affected
+Blast radius reduced: 91%
+```
+
+## Example: LLM + Memory
+
+Developer asks Claude Code: *"Why did we cap retries at 2?"*
+
+Claude calls `telos_memory_search("retry")` → finds decision event → calls `telos_memory_why(event_id)` → traces back:
+
+```
+Root cause (session_3, 2026-04-15):
+  decision: Use retry pattern for API calls
+  ↓ led_to
+  change: Added retry with max_retries=5
+  ↓ caused
+  outcome: Connection pool exhausted in 12 seconds
+  ↓ led_to
+  decision: Cap retries at 2 (root of query)
+```
+
+---
+
+## Reference Implementation
+
+Telos grew out of research into the **Causal Active World Architecture (CAWA)** — causal graphs + physics primitives + theory of mind + active inference. The original reference implementation demonstrates these principles on closed-domain scenarios:
+
+```bash
+make test       # 227+ tests
+make demo       # scenario demos
+```
+
+### Scenarios
+
+| Scenario | What It Demonstrates |
+|----------|---------------------|
+| [**Coffee Cup**](examples/coffee_cup.py) | Physics + counterfactuals via Pearl's do-operator |
+| [**Child on Road**](examples/child_road.py) | Theory of mind — predicts from beliefs, not ground truth |
+| [**Salt Request**](examples/salt_request.py) | Social inference from belief state |
+| [**Novel Entity**](examples/novel_entity.py) | Honest uncertainty — `UNKNOWN`, not hallucination |
+| [**Learned Structure**](examples/learned_structure.py) | PC/FCI/GES algorithms recover causal DAG from data |
+| [**Perception**](examples/perception_demo.py) | YOLOv8-nano → WorldState with physics property KB |
+| [**NLU**](examples/nlu_demo.py) | spaCy dependency parsing → executable causal queries |
+
+See [`docs/architecture.md`](docs/architecture.md) for the full claim-to-code map.
+
+---
+
+## Architecture
+
+```
+src/telos/
+│
+│  # Core reasoning (reference implementation)
+├── world.py                  # Entity, Relation, WorldState, UNKNOWN
+├── physics.py                # gravity, containment, impact, liquid_damage
+├── causal_graph.py           # DAG + do-calculus + propagation
+├── theory_of_mind.py         # AgentMind, belief-based prediction
+├── active_inference.py       # EFE = -(pragmatic + epistemic)
+├── agent.py                  # CAWAAgent orchestrator
+├── structure_learner.py      # PC / FCI / GES (causal-learn)
+├── perception.py             # YOLOv8-nano → WorldState
+├── nlu.py                    # spaCy → WorldState / executable queries
+│
+│  # Phase 1: Code parser
+├── code_parser/
+│   ├── parser.py             # tree-sitter orchestrator
+│   ├── graph_builder.py      # AST → SQLite dependency graph
+│   ├── store.py              # SQLite graph store
+│   └── languages/            # Python, JS, TS, Go, Java, Rust
+│
+│  # Phase 1: Impact analysis
+├── impact/
+│   ├── analyzer.py           # transitive traversal + risk scoring
+│   ├── counterfactual.py     # Pearl's do-operator on code
+│   └── reporter.py           # rich terminal output
+│
+│  # Phase 2: CLI + MCP
+├── cli.py                    # typer CLI (init, impact, hotspots, graph, info)
+├── mcp_server.py             # 19 MCP tools for LLM integration
+│
+│  # Phase 3: Memory
+├── memory/
+│   ├── event_graph.py        # causal graph over events
+│   ├── project_memory.py     # session management + recording
+│   └── cross_session_learner.py  # patterns across sessions
+│
+│  # Phase 4: Learning from history
+└── history/
+    ├── git_learner.py        # git log analysis
+    ├── developer_model.py    # AgentMind from commits
+    └── fix_evaluator.py      # rank fixes by historical evidence
+```
+
+---
+
+## Design Principles
+
+- **Proven, not guessed.** Every answer traces back through an explicit causal chain.
+- **Composable primitives.** Each layer is a standalone module with a clear interface.
+- **Pearl's do-calculus.** Interventions sever edges, counterfactuals propagate through the modified graph.
+- **Belief-based prediction.** Model the *agent's own beliefs*, not ground truth.
+- **Expected free energy.** Actions scored by `EFE = -(pragmatic + epistemic)`.
+- **Honest uncertainty.** `UNKNOWN` sentinel — refuse to reason about what you don't know.
+- **Git history is truth.** Learn from what actually happened, not what was supposed to.
+
+---
+
+## Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `tree-sitter` + 6 grammars | Code parsing (Python, JS, TS, Go, Java, Rust) |
+| `typer` + `rich` | CLI framework and colored output |
+| `mcp` | MCP server for LLM integration |
+| `causal-learn` | PC / FCI / GES structure discovery |
+| `ultralytics` | YOLOv8-nano object detection |
+| `spacy` | Dependency parsing for NLU |
 
 ---
 
 ## Limitations
 
-This is a reference implementation demonstrating architectural composition, not a production system.
+This is a working reference implementation, not a mature production system.
 
-**Core:** Causal graphs and belief states are hand-built per scene. Physics primitives are hand-coded axioms — extensible but closed-domain. No learning, no perception, no language in the core loop.
+**Code Parser:** Supports 6 languages with basic function/class/import/call extraction. Does not yet resolve cross-module references, dynamic dispatch, or macro expansion.
 
-**Structure Learner:** Supports three algorithms (PC, FCI, GES) and both linear (Fisher-Z) and nonlinear (KCI) independence tests. FCI handles latent confounders. Tested on graphs up to 6 variables. Does not yet scale to hundreds of variables or learn from raw time-series data.
+**Impact Analysis:** Edge weights are static (CALLS=1.0, INHERITS=0.9, DATA_FLOW=0.8, IMPORTS=0.6). Phase 4 enables tuning these from git history but tuning is not yet automatic.
 
-**Perception:** Detects objects and infers physics properties from a knowledge base (40+ COCO classes mapped to mass, fragility, conductivity, etc.). Heuristic monocular depth estimation from bbox geometry adds IN_FRONT_OF/BEHIND relations. Video processing with IoU-based object tracking detects appearances, disappearances, and movement. Depth estimation is heuristic, not model-based. Property KB covers common objects but not all COCO classes.
+**Memory:** SQLite-backed persistence works reliably. No synchronization yet for multi-user or multi-machine teams.
 
-**NLU:** Dependency parsing with negation detection, quantifier extraction, and physics property mapping (adjectives like "ceramic" → `fragile=True`). Queries parse into executable interventions that wire directly into `CausalGraph.counterfactual()` via `execute_query()`. Handles simple and compound spatial sentences. Complex clauses, relative clauses, and coreference remain unsupported.
+**Git Learning:** Co-change and bug-rate analysis work well. Developer expertise modeling is heuristic — treats all commits equally without weighting recency or PR approval.
 
-See [`docs/architecture.md`](docs/architecture.md) for the full claim-to-code map and honest scoping.
+**Reference Core:** Causal graphs and belief states are hand-built per scenario. Physics primitives are hand-coded axioms. See [`docs/architecture.md`](docs/architecture.md) for honest scoping.
 
 ---
 
