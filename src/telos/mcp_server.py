@@ -17,14 +17,16 @@ from telos.code_parser.store import GraphStore
 from telos.code_parser.graph_builder import GraphBuilder
 from telos.impact.analyzer import ImpactAnalyzer
 from telos.impact.counterfactual import CounterfactualAnalyzer
+from telos.memory.project_memory import ProjectMemory
+from telos.memory.cross_session_learner import CrossSessionLearner
 
 mcp = FastMCP(
     "telos",
     instructions=(
-        "Telos is a causal impact analyzer for codebases. "
-        "It builds dependency graphs from source code and traces "
-        "the full transitive impact of any change, with counterfactual "
-        "reasoning to evaluate interventions before applying them."
+        "Telos is a causal impact analyzer for codebases with persistent memory. "
+        "It builds dependency graphs from source code, traces the full transitive "
+        "impact of any change, runs counterfactual reasoning, and remembers WHY "
+        "decisions were made across sessions — not as text, but as causal chains."
     ),
 )
 
@@ -262,6 +264,260 @@ def telos_info(repo_path: str = ".") -> str:
 
     store.close()
     return json.dumps(output, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# Memory tools
+# ---------------------------------------------------------------------------
+
+def _get_memory_path(repo_path: str) -> str:
+    return os.path.join(repo_path, ".telos", "memory.db")
+
+
+def _get_memory(repo_path: str) -> ProjectMemory:
+    return ProjectMemory(_get_memory_path(repo_path))
+
+
+@mcp.tool()
+def telos_memory_start_session(
+    description: str = "",
+    repo_path: str = ".",
+) -> str:
+    """Start a new memory session for tracking decisions and changes.
+
+    Call this at the beginning of a work session. All subsequent
+    record_* calls will be grouped into this session.
+
+    Args:
+        description: What this session is about.
+        repo_path: Repository root path.
+
+    Returns:
+        JSON with session_id.
+    """
+    repo_path = os.path.abspath(repo_path)
+    memory = _get_memory(repo_path)
+    session_id = memory.start_session(description)
+    memory.close()
+    return json.dumps({"session_id": session_id, "description": description})
+
+
+@mcp.tool()
+def telos_memory_record_decision(
+    summary: str,
+    reasoning: str = "",
+    file_path: str = "",
+    node_id: str = "",
+    repo_path: str = ".",
+) -> str:
+    """Record a decision made during the current session.
+
+    Captures WHY a decision was made, not just WHAT was decided.
+    Automatically links to the previous event in the session chain.
+
+    Args:
+        summary: What was decided (e.g., "Add retry logic to API client").
+        reasoning: Why this decision was made (e.g., "Upstream service has intermittent failures").
+        file_path: Related file (if any).
+        node_id: Related code graph node (if any).
+        repo_path: Repository root path.
+
+    Returns:
+        JSON with event_id.
+    """
+    repo_path = os.path.abspath(repo_path)
+    memory = _get_memory(repo_path)
+    event_id = memory.record_decision(summary, reasoning, file_path, node_id)
+    memory.close()
+    return json.dumps({"event_id": event_id, "kind": "decision", "summary": summary})
+
+
+@mcp.tool()
+def telos_memory_record_change(
+    summary: str,
+    file_path: str,
+    node_id: str = "",
+    diff: str = "",
+    repo_path: str = ".",
+) -> str:
+    """Record a code change made during the current session.
+
+    Args:
+        summary: What changed (e.g., "Added retry with max_retries=2 and exponential backoff").
+        file_path: The file that was changed.
+        node_id: The specific function/class changed (if applicable).
+        diff: The diff or description of changes.
+        repo_path: Repository root path.
+
+    Returns:
+        JSON with event_id.
+    """
+    repo_path = os.path.abspath(repo_path)
+    memory = _get_memory(repo_path)
+    event_id = memory.record_change(summary, file_path, node_id, diff)
+    memory.close()
+    return json.dumps({"event_id": event_id, "kind": "change", "file_path": file_path})
+
+
+@mcp.tool()
+def telos_memory_record_outcome(
+    summary: str,
+    success: bool,
+    file_path: str = "",
+    node_id: str = "",
+    repo_path: str = ".",
+) -> str:
+    """Record the outcome of a change or decision.
+
+    If success is False, the outcome is automatically linked to the most
+    recent change event as a causal relationship.
+
+    Args:
+        summary: What happened (e.g., "Tests pass" or "Payment endpoint returns 500").
+        success: Whether the outcome was positive.
+        file_path: Related file (if any).
+        node_id: Related code graph node (if any).
+        repo_path: Repository root path.
+
+    Returns:
+        JSON with event_id.
+    """
+    repo_path = os.path.abspath(repo_path)
+    memory = _get_memory(repo_path)
+    event_id = memory.record_outcome(summary, success, file_path, node_id)
+    memory.close()
+    return json.dumps({"event_id": event_id, "kind": "outcome", "success": success})
+
+
+@mcp.tool()
+def telos_memory_why(
+    event_id: str,
+    repo_path: str = ".",
+) -> str:
+    """Trace the causal chain leading to an event — root cause analysis.
+
+    Walks backwards through event links to find what caused this event,
+    what caused that, all the way to the root decision.
+
+    Args:
+        event_id: The event to trace back from.
+        repo_path: Repository root path.
+
+    Returns:
+        JSON list of events in causal order (root cause first).
+    """
+    repo_path = os.path.abspath(repo_path)
+    memory = _get_memory(repo_path)
+    chain = memory.why(event_id)
+    memory.close()
+    return json.dumps([
+        {"id": e["id"], "kind": e["kind"], "summary": e["summary"], "timestamp": e["timestamp"]}
+        for e in chain
+    ], indent=2)
+
+
+@mcp.tool()
+def telos_memory_what_happened(
+    file_path: str = "",
+    node_id: str = "",
+    repo_path: str = ".",
+) -> str:
+    """Recall everything that happened to a file or code node across all sessions.
+
+    Returns all events (decisions, changes, outcomes) related to the
+    specified file or node, most recent first.
+
+    Args:
+        file_path: File to query (e.g., "src/auth.py").
+        node_id: Code graph node to query (e.g., "src/auth.py:validate_token").
+        repo_path: Repository root path.
+
+    Returns:
+        JSON list of events.
+    """
+    repo_path = os.path.abspath(repo_path)
+    memory = _get_memory(repo_path)
+    events = memory.what_happened(file_path=file_path, node_id=node_id)
+    memory.close()
+    return json.dumps([
+        {"id": e["id"], "kind": e["kind"], "summary": e["summary"],
+         "timestamp": e["timestamp"], "file_path": e.get("file_path", "")}
+        for e in events
+    ], indent=2)
+
+
+@mcp.tool()
+def telos_memory_patterns(repo_path: str = ".") -> str:
+    """Analyze patterns across all sessions — what changes often, what breaks.
+
+    Returns:
+    - Most frequently changed files
+    - Failure-prone files (high failure rate after changes)
+    - Files frequently changed together
+    - Total session and event counts
+
+    Args:
+        repo_path: Repository root path.
+
+    Returns:
+        JSON summary of cross-session patterns.
+    """
+    repo_path = os.path.abspath(repo_path)
+    memory = _get_memory(repo_path)
+    learner = CrossSessionLearner(memory._graph)
+    result = learner.patterns()
+    memory.close()
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def telos_memory_search(
+    query: str,
+    repo_path: str = ".",
+) -> str:
+    """Search across all memory events by keyword.
+
+    Args:
+        query: Search term to match against event summaries.
+        repo_path: Repository root path.
+
+    Returns:
+        JSON list of matching events.
+    """
+    repo_path = os.path.abspath(repo_path)
+    memory = _get_memory(repo_path)
+    events = memory.search(query)
+    memory.close()
+    return json.dumps([
+        {"id": e["id"], "kind": e["kind"], "summary": e["summary"],
+         "timestamp": e["timestamp"]}
+        for e in events
+    ], indent=2)
+
+
+@mcp.tool()
+def telos_memory_recent(
+    limit: int = 20,
+    repo_path: str = ".",
+) -> str:
+    """Show the most recent memory events across all sessions.
+
+    Args:
+        limit: Maximum number of events to return.
+        repo_path: Repository root path.
+
+    Returns:
+        JSON list of recent events.
+    """
+    repo_path = os.path.abspath(repo_path)
+    memory = _get_memory(repo_path)
+    events = memory.recent(limit=limit)
+    memory.close()
+    return json.dumps([
+        {"id": e["id"], "kind": e["kind"], "summary": e["summary"],
+         "timestamp": e["timestamp"], "session_id": e.get("session_id", "")}
+        for e in events
+    ], indent=2)
 
 
 if __name__ == "__main__":

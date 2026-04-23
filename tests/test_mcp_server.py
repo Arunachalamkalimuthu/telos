@@ -11,6 +11,15 @@ from telos.mcp_server import (
     telos_counterfactual,
     telos_hotspots,
     telos_info,
+    telos_memory_start_session,
+    telos_memory_record_decision,
+    telos_memory_record_change,
+    telos_memory_record_outcome,
+    telos_memory_why,
+    telos_memory_what_happened,
+    telos_memory_patterns,
+    telos_memory_search,
+    telos_memory_recent,
 )
 
 
@@ -106,6 +115,77 @@ class TestMCPTools(unittest.TestCase):
     def test_telos_hotspots_with_top_n(self):
         result = json.loads(telos_hotspots(repo_path=self.tmpdir, top_n=2))
         self.assertLessEqual(len(result), 2)
+
+
+class TestMCPMemoryTools(unittest.TestCase):
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+
+    def test_start_session(self):
+        result = json.loads(telos_memory_start_session(
+            description="Fix auth bug",
+            repo_path=self.tmpdir,
+        ))
+        self.assertIn("session_id", result)
+        self.assertEqual(result["description"], "Fix auth bug")
+
+    def test_record_decision(self):
+        telos_memory_start_session(description="test", repo_path=self.tmpdir)
+        result = json.loads(telos_memory_record_decision(
+            summary="Add retry logic",
+            reasoning="Upstream is flaky",
+            file_path="api.py",
+            repo_path=self.tmpdir,
+        ))
+        self.assertEqual(result["kind"], "decision")
+
+    def test_record_change(self):
+        telos_memory_start_session(description="test", repo_path=self.tmpdir)
+        result = json.loads(telos_memory_record_change(
+            summary="Added retry with backoff",
+            file_path="api.py",
+            repo_path=self.tmpdir,
+        ))
+        self.assertEqual(result["kind"], "change")
+        self.assertEqual(result["file_path"], "api.py")
+
+    def test_record_outcome(self):
+        telos_memory_start_session(description="test", repo_path=self.tmpdir)
+        result = json.loads(telos_memory_record_outcome(
+            summary="Tests pass",
+            success=True,
+            repo_path=self.tmpdir,
+        ))
+        self.assertEqual(result["kind"], "outcome")
+        self.assertTrue(result["success"])
+
+    def test_what_happened_for_file(self):
+        telos_memory_start_session(description="test", repo_path=self.tmpdir)
+        telos_memory_record_change(summary="Changed auth", file_path="auth.py", repo_path=self.tmpdir)
+        result = json.loads(telos_memory_what_happened(file_path="auth.py", repo_path=self.tmpdir))
+        self.assertGreater(len(result), 0)
+        self.assertEqual(result[0]["file_path"], "auth.py")
+
+    def test_search(self):
+        telos_memory_start_session(description="test", repo_path=self.tmpdir)
+        telos_memory_record_decision(summary="Add retry logic to payment", repo_path=self.tmpdir)
+        result = json.loads(telos_memory_search(query="retry", repo_path=self.tmpdir))
+        self.assertGreater(len(result), 0)
+
+    def test_recent(self):
+        telos_memory_start_session(description="test", repo_path=self.tmpdir)
+        telos_memory_record_decision(summary="decision 1", repo_path=self.tmpdir)
+        telos_memory_record_change(summary="change 1", file_path="x.py", repo_path=self.tmpdir)
+        result = json.loads(telos_memory_recent(limit=5, repo_path=self.tmpdir))
+        self.assertGreater(len(result), 0)
+
+    def test_patterns(self):
+        telos_memory_start_session(description="test", repo_path=self.tmpdir)
+        telos_memory_record_change(summary="fix", file_path="a.py", repo_path=self.tmpdir)
+        result = json.loads(telos_memory_patterns(repo_path=self.tmpdir))
+        self.assertIn("most_changed", result)
+        self.assertIn("total_events", result)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ and "what happened last time we changed this?"
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import uuid
 from datetime import datetime
@@ -55,6 +56,7 @@ class EventGraph:
     """A causal event graph persisted in SQLite."""
 
     def __init__(self, db_path: str) -> None:
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self._conn = sqlite3.connect(db_path)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
