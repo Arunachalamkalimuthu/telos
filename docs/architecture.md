@@ -1,6 +1,93 @@
-# CAWA Architecture
+# Telos Architecture
 
-This document maps each architectural claim to where it is realised (or honestly scoped) in this codebase.
+Telos has two layers:
+
+1. **Product layers (Phases 1-4)** — a causal reasoning and memory system for LLM coding assistants. Shipped and working, exposed via CLI and MCP.
+2. **Research core (CAWA)** — the Causal Active World Architecture reference implementation. Demonstrates how causal graphs, physics primitives, theory of mind, and active inference compose.
+
+The product layers build on primitives from the research core (`causal_graph.py` do-calculus, `theory_of_mind.py` AgentMind, `active_inference.py` EFE scoring).
+
+---
+
+## Product Architecture
+
+### Phase 1: Code Graph + Impact Analysis
+
+| Component | Location | Responsibility |
+|-----------|----------|---------------|
+| Parser orchestrator | `src/telos/code_parser/parser.py` | tree-sitter multi-language dispatch |
+| Language extractors | `src/telos/code_parser/languages/*.py` | Python, JavaScript, TypeScript, Go, Java, Rust |
+| Graph builder | `src/telos/code_parser/graph_builder.py` | AST → SQLite nodes + edges |
+| Graph store | `src/telos/code_parser/store.py` | SQLite persistence at `.telos/graph.db` |
+| Impact analyzer | `src/telos/impact/analyzer.py` | Transitive traversal with risk scoring |
+| Counterfactual engine | `src/telos/impact/counterfactual.py` | Pearl's do-operator on the code graph |
+| Reporter | `src/telos/impact/reporter.py` | Rich terminal output (trees, tables) |
+
+**Edge weights:** `CALLS=1.0`, `INHERITS=0.9`, `DATA_FLOW=0.8`, `IMPORTS=0.6`. Risk along a path = product of edge weights.
+
+### Phase 2: CLI + MCP Server
+
+| Component | Location | Responsibility |
+|-----------|----------|---------------|
+| CLI | `src/telos/cli.py` | `telos init`, `impact`, `counterfactual`, `hotspots`, `info` |
+| MCP server | `src/telos/mcp_server.py` | 19 tools exposed to any LLM via MCP protocol |
+
+### Phase 3: Memory Layer
+
+| Component | Location | Responsibility |
+|-----------|----------|---------------|
+| Event graph | `src/telos/memory/event_graph.py` | SQLite-backed causal graph over events (sessions, decisions, changes, outcomes) |
+| Project memory | `src/telos/memory/project_memory.py` | Session management + structured event recording with auto-linking |
+| Cross-session learner | `src/telos/memory/cross_session_learner.py` | Pattern detection across sessions (most-changed, failure-prone, co-changes) |
+
+### Phase 4: Learning from History
+
+| Component | Location | Responsibility |
+|-----------|----------|---------------|
+| Git learner | `src/telos/history/git_learner.py` | Parses `git log` for co-changes, churn, bug-prone files, coupling |
+| Developer model | `src/telos/history/developer_model.py` | Builds `AgentMind` profiles from commit history; suggests reviewers |
+| Fix evaluator | `src/telos/history/fix_evaluator.py` | Ranks candidate fixes by combining counterfactual + historical + developer evidence |
+
+---
+
+## MCP Tool Surface
+
+19 tools across 4 groups:
+
+| Group | Tools |
+|-------|-------|
+| **Impact Analysis (Phase 1-2)** | `telos_init`, `telos_impact`, `telos_counterfactual`, `telos_hotspots`, `telos_info` |
+| **Memory (Phase 3)** | `telos_memory_start_session`, `telos_memory_record_decision`, `telos_memory_record_change`, `telos_memory_record_outcome`, `telos_memory_why`, `telos_memory_what_happened`, `telos_memory_patterns`, `telos_memory_search`, `telos_memory_recent` |
+| **Git History (Phase 4)** | `telos_history_patterns`, `telos_history_bug_prone`, `telos_developer_profile`, `telos_developer_risk`, `telos_suggest_reviewers` |
+
+Each tool returns JSON for the LLM to parse.
+
+---
+
+## Data Flow
+
+```
+Developer question ──▶ LLM ──▶ MCP tool call ──▶ Telos tool
+                                                      │
+                           ┌──────────────────────────┼──────────────────┐
+                           ▼                          ▼                  ▼
+                  Code graph (.telos/graph.db)  Memory (memory.db)  Git (subprocess)
+                           │                          │                  │
+                           └──────────────┬───────────┴──────────────────┘
+                                          ▼
+                          Structured JSON result ──▶ LLM ──▶ Developer
+```
+
+- Impact tools read code graph
+- Memory tools read/write event graph
+- History tools shell out to git (read-only)
+- All results are JSON — LLM composes them into natural-language answers
+
+---
+
+## Research Core (CAWA)
+
+The original reference implementation demonstrates the Causal Active World Architecture.
 
 ## Claim → code
 
@@ -39,6 +126,7 @@ This document maps each architectural claim to where it is realised (or honestly
 | `examples/learned_structure.py` | PC algorithm recovers causal edges from observational samples; comparison against hand-built graph shows precision/recall. |
 | `examples/perception_demo.py` | YOLOv8-nano detects objects in an image; spatial relations derived from bounding box geometry; result is a standard WorldState. |
 | `examples/nlu_demo.py` | spaCy dependency parsing converts natural language scene descriptions into WorldState and classifies questions as counterfactual or prediction. |
+| `examples/telos_product_demo.py` | End-to-end product demo spanning all 4 phases: impact analysis, counterfactuals, memory recording + causal chain traversal, git history patterns, developer expertise. |
 
 ## Trade-offs
 
