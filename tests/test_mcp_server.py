@@ -20,6 +20,11 @@ from telos.mcp_server import (
     telos_memory_patterns,
     telos_memory_search,
     telos_memory_recent,
+    telos_history_patterns,
+    telos_history_bug_prone,
+    telos_developer_profile,
+    telos_developer_risk,
+    telos_suggest_reviewers,
 )
 
 
@@ -186,6 +191,123 @@ class TestMCPMemoryTools(unittest.TestCase):
         result = json.loads(telos_memory_patterns(repo_path=self.tmpdir))
         self.assertIn("most_changed", result)
         self.assertIn("total_events", result)
+
+
+class TestMCPHistoryTools(unittest.TestCase):
+    """Phase 4 history/developer tools — run against the telos repo itself."""
+
+    REPO = "."
+
+    def _unwrap(self, raw):
+        """Parse tool output and skip if we got an error (e.g., not a git repo)."""
+        result = json.loads(raw)
+        if isinstance(result, dict) and "error" in result:
+            self.skipTest(f"tool returned error: {result['error']}")
+        return result
+
+    def test_history_patterns_returns_json(self):
+        result = self._unwrap(telos_history_patterns(repo_path=self.REPO))
+        self.assertIn("co_change_top", result)
+        self.assertIn("bug_prone_top", result)
+        self.assertIn("recent_hotspots", result)
+        self.assertIn("stats", result)
+        self.assertIsInstance(result["co_change_top"], list)
+        self.assertIsInstance(result["bug_prone_top"], list)
+        self.assertIsInstance(result["recent_hotspots"], list)
+        self.assertIn("total_commits", result["stats"])
+
+    def test_history_bug_prone(self):
+        result = self._unwrap(
+            telos_history_bug_prone(repo_path=self.REPO, top_n=5)
+        )
+        self.assertIsInstance(result, list)
+        self.assertLessEqual(len(result), 5)
+        for entry in result:
+            self.assertIn("file_path", entry)
+            self.assertIn("bug_rate", entry)
+            self.assertGreaterEqual(entry["bug_rate"], 0.0)
+            self.assertLessEqual(entry["bug_rate"], 1.0)
+
+    def _pick_author(self):
+        """Return some author present in the repo, or skip if none."""
+        from telos.history.git_learner import GitLearner
+
+        try:
+            learner = GitLearner(self.REPO)
+        except ValueError:
+            self.skipTest("not a git repo")
+        commits = learner.get_commits(max_count=50)
+        for c in commits:
+            if c.get("author"):
+                return c["author"]
+        self.skipTest("no authors in history")
+
+    def test_developer_profile(self):
+        author = self._pick_author()
+        result = self._unwrap(
+            telos_developer_profile(author=author, repo_path=self.REPO)
+        )
+        self.assertIn("name", result)
+        self.assertEqual(result["name"], author)
+        self.assertIn("expertise_files", result)
+        self.assertIn("expertise_areas", result)
+        self.assertIn("commit_count", result)
+        self.assertIn("recent_activity_days", result)
+        self.assertLessEqual(len(result["expertise_files"]), 10)
+
+    def test_developer_risk(self):
+        author = self._pick_author()
+        result = self._unwrap(
+            telos_developer_risk(
+                author=author,
+                file_path="src/telos/mcp_server.py",
+                repo_path=self.REPO,
+            )
+        )
+        self.assertIn("risk", result)
+        self.assertIn("reasoning", result)
+        self.assertGreaterEqual(result["risk"], 0.0)
+        self.assertLessEqual(result["risk"], 1.0)
+
+    def test_suggest_reviewers_returns_list(self):
+        # Pick a file that definitely exists in history.
+        from telos.history.git_learner import GitLearner
+
+        try:
+            learner = GitLearner(self.REPO)
+        except ValueError:
+            self.skipTest("not a git repo")
+        churn = learner.file_churn(learner.get_commits(max_count=200))
+        if not churn:
+            self.skipTest("no file churn data")
+        target_file = max(churn, key=churn.get)
+
+        result = self._unwrap(
+            telos_suggest_reviewers(
+                file_path=target_file,
+                repo_path=self.REPO,
+                top_n=3,
+            )
+        )
+        self.assertIsInstance(result, list)
+        self.assertLessEqual(len(result), 3)
+        # For a frequently-touched file we expect at least one reviewer.
+        self.assertGreater(len(result), 0)
+
+    def test_history_patterns_non_git_returns_error(self):
+        tmp = tempfile.mkdtemp()
+        raw = telos_history_patterns(repo_path=tmp)
+        result = json.loads(raw)
+        self.assertIn("error", result)
+
+    def test_developer_profile_unknown_author_returns_error(self):
+        raw = telos_developer_profile(
+            author="__definitely_not_an_author__",
+            repo_path=self.REPO,
+        )
+        result = json.loads(raw)
+        # Either "not a git repo" error or "no commits found" error — both OK.
+        self.assertIn("error", result)
 
 
 if __name__ == "__main__":

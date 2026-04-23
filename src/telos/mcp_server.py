@@ -19,6 +19,8 @@ from telos.impact.analyzer import ImpactAnalyzer
 from telos.impact.counterfactual import CounterfactualAnalyzer
 from telos.memory.project_memory import ProjectMemory
 from telos.memory.cross_session_learner import CrossSessionLearner
+from telos.history.git_learner import GitLearner
+from telos.history.developer_model import DeveloperModel
 
 mcp = FastMCP(
     "telos",
@@ -518,6 +520,209 @@ def telos_memory_recent(
          "timestamp": e["timestamp"], "session_id": e.get("session_id", "")}
         for e in events
     ], indent=2)
+
+
+# ---------------------------------------------------------------------------
+# History / developer tools (Phase 4)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+def telos_history_patterns(
+    repo_path: str = ".",
+    max_commits: int = 500,
+) -> str:
+    """Summarise patterns learned from git history.
+
+    Combines co-change coupling, bug-prone files, recent hotspots, and
+    aggregate stats into a single snapshot of how the repo has evolved.
+
+    Args:
+        repo_path: Path to the repository root (must be a git repo).
+        max_commits: How many recent commits to analyse.
+
+    Returns:
+        JSON with co_change_top, bug_prone_top, recent_hotspots, and stats.
+    """
+    repo_path = os.path.abspath(repo_path)
+    try:
+        learner = GitLearner(repo_path)
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)})
+
+    try:
+        commits = learner.get_commits(max_count=max_commits)
+
+        co_change = learner.co_change_matrix(commits)
+        co_change_top = sorted(
+            (
+                {"file_a": a, "file_b": b, "count": n}
+                for (a, b), n in co_change.items()
+            ),
+            key=lambda d: d["count"],
+            reverse=True,
+        )[:10]
+
+        bug_prone_top = learner.bug_prone_files(commits, top_n=10)
+        recent_hotspots = learner.recent_hotspots(days=30, top_n=10)
+        stats = learner.get_stats()
+
+        return json.dumps(
+            {
+                "co_change_top": co_change_top,
+                "bug_prone_top": bug_prone_top,
+                "recent_hotspots": recent_hotspots,
+                "stats": stats,
+            },
+            indent=2,
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+def telos_history_bug_prone(
+    repo_path: str = ".",
+    top_n: int = 10,
+    max_commits: int = 500,
+) -> str:
+    """List files that most often appear in bug-fix commits.
+
+    Args:
+        repo_path: Path to the repository root.
+        top_n: Maximum number of files to return.
+        max_commits: How many recent commits to analyse.
+
+    Returns:
+        JSON list of ``{file_path, bug_fix_count, total_changes, bug_rate}``.
+    """
+    repo_path = os.path.abspath(repo_path)
+    try:
+        learner = GitLearner(repo_path)
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)})
+
+    try:
+        commits = learner.get_commits(max_count=max_commits)
+        bugs = learner.bug_prone_files(commits, top_n=top_n)
+        return json.dumps(bugs, indent=2)
+    except Exception as exc:  # pragma: no cover - defensive
+        return json.dumps({"error": str(exc)})
+
+
+@mcp.tool()
+def telos_developer_profile(
+    author: str,
+    repo_path: str = ".",
+    max_commits: int = 500,
+) -> str:
+    """Build a developer profile from git history.
+
+    Args:
+        author: The commit-author name to profile (exact string match).
+        repo_path: Path to the repository root.
+        max_commits: How many recent commits to analyse.
+
+    Returns:
+        JSON with name, expertise_files (top 10), expertise_areas,
+        commit_count, and recent_activity_days. ``{"error": ...}`` if the
+        author has no commits in the window or the repo is not a git repo.
+    """
+    repo_path = os.path.abspath(repo_path)
+    try:
+        learner = GitLearner(repo_path)
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)})
+
+    model = DeveloperModel(learner)
+    profile = model.profile_for(author, max_commits=max_commits)
+    if profile is None:
+        return json.dumps(
+            {"error": f"No commits found for author {author!r}."}
+        )
+
+    return json.dumps(
+        {
+            "name": profile.name,
+            "expertise_files": profile.expertise_files[:10],
+            "expertise_areas": profile.expertise_areas,
+            "commit_count": profile.commit_count,
+            "recent_activity_days": profile.recent_activity_days,
+            "typical_commit_size": profile.typical_commit_size,
+            "co_authors": profile.co_authors,
+        },
+        indent=2,
+    )
+
+
+@mcp.tool()
+def telos_developer_risk(
+    author: str,
+    file_path: str,
+    repo_path: str = ".",
+    max_commits: int = 500,
+) -> str:
+    """Score the risk of a given author editing a given file.
+
+    Uses the developer's historical expertise (files touched, areas worked
+    in) to assess whether they're venturing outside familiar territory.
+
+    Args:
+        author: The author proposing the change.
+        file_path: Repo-relative path they'd be editing.
+        repo_path: Path to the repository root.
+        max_commits: History window in commits.
+
+    Returns:
+        JSON with risk score (0.0 safe – 1.0 risky), knows_file, knows_area,
+        and human-readable reasoning.
+    """
+    repo_path = os.path.abspath(repo_path)
+    try:
+        learner = GitLearner(repo_path)
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)})
+
+    model = DeveloperModel(learner)
+    result = model.risk_score_for_change(
+        author, file_path, max_commits=max_commits
+    )
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+def telos_suggest_reviewers(
+    file_path: str,
+    repo_path: str = ".",
+    exclude_author: str = "",
+    top_n: int = 3,
+) -> str:
+    """Suggest reviewers for a file based on who has touched it most.
+
+    Direct file hits are weighted more than same-area hits.
+
+    Args:
+        file_path: The file under review.
+        repo_path: Path to the repository root.
+        exclude_author: Author to exclude (typically the change's author).
+        top_n: Maximum number of reviewers to return.
+
+    Returns:
+        JSON list of suggested reviewer names, most relevant first.
+    """
+    repo_path = os.path.abspath(repo_path)
+    try:
+        learner = GitLearner(repo_path)
+    except ValueError as exc:
+        return json.dumps({"error": str(exc)})
+
+    model = DeveloperModel(learner)
+    reviewers = model.suggest_reviewers(
+        file_path=file_path,
+        exclude_author=exclude_author,
+        top_n=top_n,
+    )
+    return json.dumps(reviewers, indent=2)
 
 
 if __name__ == "__main__":
