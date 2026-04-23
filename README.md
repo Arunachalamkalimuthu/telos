@@ -148,6 +148,50 @@ src/telos/
 | `causal-learn` | 0.1.x | PC algorithm for causal structure discovery |
 | `ultralytics` | 8.x | YOLOv8-nano object detection |
 | `spacy` | 3.x | Dependency parsing for NLU |
+| `mcp` | 1.x | MCP server for LLM integration |
+
+---
+
+## MCP Server (LLM Integration)
+
+Telos runs as an MCP server, letting any LLM (Claude Code, Cursor, etc.) call its tools directly.
+
+### Tools exposed
+
+| Tool | What it does |
+|------|-------------|
+| `telos_init` | Scan codebase, build dependency graph |
+| `telos_impact` | Trace transitive impact of changing a node |
+| `telos_counterfactual` | Compare blast radius with/without intervention |
+| `telos_hotspots` | Show most depended-on code |
+| `telos_info` | Graph statistics and metadata |
+
+### Configure in Claude Code
+
+Add to your Claude Code settings (`~/.claude/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "telos": {
+      "command": "python3",
+      "args": ["-m", "telos.mcp_server"],
+      "cwd": "/path/to/your/repo"
+    }
+  }
+}
+```
+
+Then in Claude Code, telos tools are available automatically:
+- "What breaks if I change `auth.py:validate_token`?"
+- "Show me the dependency hotspots"
+- "What if we add a fallback at `middleware.py:require_auth`?"
+
+### Run standalone
+
+```bash
+python -m telos.mcp_server
+```
 
 ---
 
